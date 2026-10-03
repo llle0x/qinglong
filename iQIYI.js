@@ -28,7 +28,7 @@ function parseCookie(value) {
   }));
   const missing = ['P00001', 'P00003', '__dfp'].filter(k => !fields[k]);
   if (missing.length) throw inputError(`IQIYI_COOKIE 缺少字段：${missing.join('、')}；请重新获取完整 Cookie`);
-  if (!/^[A-Za-z0-9_-]+$/.test(fields.P00001) || !/^\d+$/.test(fields.P00003) || !/^\w+$/.test(fields.__dfp)) throw inputError('Cookie 关键字段格式不正确；请确认填写的是完整 Cookie 字符串，而非 JSON 或单独的 Token');
+  if (['P00001', 'P00003', '__dfp'].some(k => /[\x00-\x1f\x7f]/.test(fields[k]))) throw inputError('Cookie 关键字段包含控制字符，请重新获取完整 Cookie');
   return fields;
 }
 function request(options, callback, method = 'GET') {
@@ -66,7 +66,7 @@ const $nobyda = {
   post: (opts, cb) => request(opts, cb, 'POST')
 };
 async function main() {
-  console.log('爱奇艺青龙脚本 v2026.10.03.2');
+  console.log('爱奇艺青龙脚本 v2026.10.03.4');
   const fields = parseCookie(process.env.IQIYI_COOKIE);
   console.log('Cookie 三个必需字段校验通过，开始请求爱奇艺接口。');
   P00001 = fields.P00001;
@@ -90,7 +90,7 @@ async function main() {
 function login() {
   return new Promise(resolve => {
     var URL = {
-      url: 'https://cards.iqiyi.com/views_category/3.0/vip_home?secure_p=iPhone&scrn_scale=0&dev_os=0&ouid=0&layout_v=6&psp_cki=' + P00001 + '&page_st=suggest&app_k=8e48946f144759d86a50075555fd5862&dev_ua=iPhone8%2C2&net_sts=1&cupid_uid=0&xas=1&init_type=6&app_v=11.4.5&idfa=0&app_t=0&platform_id=0&layout_name=0&req_sn=0&api_v=0&psp_status=0&psp_uid=451953037415627&qyid=0&secure_v=0&req_times=0',
+      url: 'https://cards.iqiyi.com/views_category/3.0/vip_home?secure_p=iPhone&scrn_scale=0&dev_os=0&ouid=0&layout_v=6&psp_cki=' + encodeURIComponent(P00001) + '&page_st=suggest&app_k=8e48946f144759d86a50075555fd5862&dev_ua=iPhone8%2C2&net_sts=1&cupid_uid=0&xas=1&init_type=6&app_v=11.4.5&idfa=0&app_t=0&platform_id=0&layout_name=0&req_sn=0&api_v=0&psp_status=0&psp_uid=451953037415627&qyid=0&secure_v=0&req_times=0',
       headers: {
         sign: '7fd8aadd90f4cfc99a858a4b087bcc3a',
         t: '479112291'
@@ -195,7 +195,7 @@ function Checkin() {
 function Lottery(s) {
   return new Promise(resolve => {
     const URL = {
-      url: 'https://iface2.iqiyi.com/aggregate/3.0/lottery_activity?app_k=0&app_v=0&platform_id=0&dev_os=0&dev_ua=0&net_sts=0&qyid=0&psp_uid=0&psp_cki=' + P00001 + '&psp_status=0&secure_p=0&secure_v=0&req_sn=0'
+      url: 'https://iface2.iqiyi.com/aggregate/3.0/lottery_activity?app_k=0&app_v=0&platform_id=0&dev_os=0&dev_ua=0&net_sts=0&qyid=0&psp_uid=0&psp_cki=' + encodeURIComponent(P00001) + '&psp_status=0&secure_p=0&secure_v=0&req_sn=0'
     }
     $nobyda.get(URL, async function (error, response, data) {
       const Details = LogDetails ? `msg:\n${data || error}` : ''
@@ -225,7 +225,7 @@ function Lottery(s) {
 
 function getTaskList(task) {
   return new Promise(resolve => {
-    $nobyda.get(`https://tc.vip.iqiyi.com/taskCenter/task/queryUserTask?P00001=${P00001}`, function (error, response, data) {
+    $nobyda.get(`https://tc.vip.iqiyi.com/taskCenter/task/queryUserTask?P00001=${encodeURIComponent(P00001)}`, function (error, response, data) {
       let taskListMsg, taskList = [];
       const Details = LogDetails ? `msg:\n${data || error}` : '';
       try {
@@ -256,7 +256,7 @@ function getTaskList(task) {
 
 function joinTask(task) {
   return new Promise(resolve => {
-    $nobyda.get('https://tc.vip.iqiyi.com/taskCenter/task/joinTask?taskCode=' + task.taskCode + '&lang=zh_CN&platform=0000000000000000&P00001=' + P00001, function (error, response, data) {
+    $nobyda.get('https://tc.vip.iqiyi.com/taskCenter/task/joinTask?taskCode=' + encodeURIComponent(task.taskCode) + '&lang=zh_CN&platform=0000000000000000&P00001=' + encodeURIComponent(P00001), function (error, response, data) {
       let joinTaskMsg, Details = LogDetails ? `msg:\n${data || error}` : '';
       try {
         if (error) throw new Error(`请求失败`);
@@ -273,7 +273,7 @@ function joinTask(task) {
 
 function notifyTask(task) {
   return new Promise(resolve => {
-    $nobyda.get('https://tc.vip.iqiyi.com/taskCenter/task/notify?taskCode=' + task.taskCode + '&lang=zh_CN&platform=0000000000000000&P00001=' + P00001, function (error, response, data) {
+    $nobyda.get('https://tc.vip.iqiyi.com/taskCenter/task/notify?taskCode=' + encodeURIComponent(task.taskCode) + '&lang=zh_CN&platform=0000000000000000&P00001=' + encodeURIComponent(P00001), function (error, response, data) {
       let notifyTaskMsg, Details = LogDetails ? `msg:\n${data || error}` : '';
       try {
         if (error) throw new Error(`请求失败`);
@@ -290,7 +290,7 @@ function notifyTask(task) {
 
 function getTaskRewards(task) {
   return new Promise(resolve => {
-    $nobyda.get('https://tc.vip.iqiyi.com/taskCenter/task/getTaskRewards?taskCode=' + task.taskCode + '&lang=zh_CN&platform=0000000000000000&P00001=' + P00001, function (error, response, data) {
+    $nobyda.get('https://tc.vip.iqiyi.com/taskCenter/task/getTaskRewards?taskCode=' + encodeURIComponent(task.taskCode) + '&lang=zh_CN&platform=0000000000000000&P00001=' + encodeURIComponent(P00001), function (error, response, data) {
       let RewardsMsg;
       const Details = LogDetails ? `msg:\n${data || error}` : ''
       try {
@@ -331,13 +331,13 @@ function w() {
   var e = arguments.length > 0 && void 0 !== arguments[0] ? arguments[0] : {}
     , t = [];
   return Object.keys(e).forEach((function (a) {
-    t.push("".concat(a, "=").concat(e[a]))
+    t.push(`${encodeURIComponent(a)}=${encodeURIComponent(e[a])}`)
   }
   )),
     t.join("&")
 }
 
-module.exports = { parseCookie, request, main };
+module.exports = { parseCookie, request, main, encodeQuery: w };
 if (require.main === module) main().catch(error => {
   console.error(`任务失败：${error.safeMessage || '执行异常；请根据上方接口日志检查网络及接口状态'}`);
   process.exitCode = 1;

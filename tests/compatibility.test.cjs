@@ -119,3 +119,18 @@ test('manual run with placeholder request synchronizes stored Cookie', async () 
     assert.ok(!JSON.stringify(result.logs).includes('unrelated=private'));
   }
 });
+
+test('Cookie accepts punctuation without imposing undocumented token formats', () => {
+  const fields = parseCookie('P00001=token.with+symbols/and=padding&x; P00003=user-123; __dfp=device-id@version;');
+  assert.equal(fields.P00001, 'token.with+symbols/and=padding&x');
+  assert.equal(fields.P00003, 'user-123');
+  assert.equal(fields.__dfp, 'device-id@version');
+  assert.throws(() => parseCookie('P00001=bad\r\nvalue; P00003=123; __dfp=device;'), /控制字符/);
+});
+test('query encoding preserves special characters without adding parameters', () => {
+  const { encodeQuery } = require('../iQIYI.js');
+  const params = { authCookie: 'token+/.=&injected=true', userId: 'user-123' };
+  const result = new URLSearchParams(encodeQuery(params));
+  assert.deepEqual(Object.fromEntries(result), params);
+  assert.equal(result.has('injected'), false);
+});
