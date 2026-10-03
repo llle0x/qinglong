@@ -645,10 +645,14 @@ class UserInfo {
           0x1,
         ),
         _0x35d953 = {
-          url: "https://developer.aliyun.com/ask?pageNum=" + _0x21f883,
+          url: "https://developer.aliyun.com/ask/?pageNum=" + _0x21f883,
           type: _0x2d934c["BhNap"],
         };
       let _0x21a196 = await this["fetch"](_0x35d953);
+      if (typeof _0x21a196 !== "string" || !_0x21a196.trim()) {
+        $["log"]("⛔️ 获取问答列表失败：未取得 HTML，跳过本次问答");
+        return null;
+      }
       const _0x3f3437 = $["Cheerio"]["load"](_0x21a196),
         _0x5341fa = _0x2d934c["wifgB"](_0x3f3437, _0x2d934c["MDVED"]),
         _0x1772a5 = _0x5341fa["find"](_0x2d934c["WYycT"])
@@ -946,29 +950,33 @@ class UserInfo {
     }
   }
   async ["doScene"]() {
-    const _0x26f6d7 = null,
-      _0x4607cd = {
-        tLluj: "c_csrf=([^;]*)",
-        lMWkc: function (_0x37b021, _0x3989de) {
-          return _0x37b021 === _0x3989de;
-        },
-      },
-      _0xbeffd6 = this["token"]["match"](new RegExp(_0x4607cd["tLluj"]))[0x1];
-    (await this["getSceneList"](), await $["wait"](this["getRandomTime"]()));
-    const _0x109c54 = await this["getSceneDetailPageInfoById"]();
-    (await $["wait"](this["getRandomTime"]()),
-      _0x109c54
-        ? (await this["getSceneStartPageInfoById"](),
-          await $["wait"](this["getRandomTime"]()),
-          _0x4607cd["lMWkc"](resourceFrom, "2")
-            ? (await this["startSceneById"](_0xbeffd6),
-              await $["wait"](this["getRandomTime"]()),
-              await this["closeSceneById"](_0xbeffd6),
-              await $["wait"](this["getRandomTime"]()))
-            : await this["doScene"]())
-        : await this["doScene"]());
+    const fail = (reason) => {
+      this.ckStatus = false;
+      const message = `账号 ${this.index} 场景任务未完成：${reason}，已停止本次场景任务`;
+      $.log(`⛔️ ${message}`);
+      $.notifyMsg.push(message);
+      return false;
+    };
+    const csrf = this.token.match(/(?:^|;\s*)c_csrf=([^;]+)/)?.[1];
+    if (!csrf) return fail("Cookie 缺少 c_csrf");
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      if (!(await this.getSceneList())) return fail("未取得有效场景列表");
+      await $.wait(this.getRandomTime());
+      if (!(await this.getSceneDetailPageInfoById())) continue;
+      await $.wait(this.getRandomTime());
+      if (!(await this.getSceneStartPageInfoById()))
+        return fail("初始化信息异常");
+      await $.wait(this.getRandomTime());
+      if (resourceFrom !== "2") continue;
+      if (!(await this.startSceneById(csrf))) return fail("启动失败");
+      await $.wait(this.getRandomTime());
+      if (!(await this.closeSceneById(csrf))) return fail("关闭失败");
+      return true;
+    }
+    return fail("连续 3 次未找到可执行场景");
   }
   async ["getSceneList"]() {
+    sceneId = "";
     const _0x37e4f8 = null,
       _0x50e863 = {
         SSVNa: function (_0x288fd1, _0x3e79b8) {
@@ -995,7 +1003,7 @@ class UserInfo {
           url: _0x50e863["xBdmD"],
           type: "get",
           params: {
-            tags: _0x50e863["cOMmF"](encodeURIComponent, ","),
+            tags: ",",
             difficulty: "",
             orderBy: _0x50e863["UXOHC"],
             pageNum: _0x2c9fdc,
@@ -1009,21 +1017,29 @@ class UserInfo {
         },
         _0x420fdc = await this["fetch"](_0x11ed43),
         _0x32ec99 = _0x420fdc?.["data"]?.["list"];
-      if (_0x32ec99["length"]) {
+      if (Array.isArray(_0x32ec99) && _0x32ec99.length) {
         const _0x1210da =
           _0x32ec99[
             Math["floor"](
               _0x50e863["Tdapc"](Math["random"](), _0x32ec99["length"]),
             )
           ];
-        ((sceneId = _0x1210da?.["id"]),
-          $["log"]("✅ 获取场景: " + _0x1210da["name"] + "[" + sceneId + "]"));
-      } else $["log"]("⛔️ 获取场景失败! " + e);
+        sceneId = _0x1210da?.id || "";
+        if (!sceneId) {
+          $.log("⛔️ 场景列表条目缺少 ID");
+          return null;
+        }
+        $.log("✅ 获取场景: " + _0x1210da.name + "[" + sceneId + "]");
+        return sceneId;
+      }
+      $.log("⛔️ 获取场景失败：列表为空或接口格式异常");
+      return null;
     } catch (_0x12ed82) {
       ((this["ckStatus"] = ![]), $["log"]("⛔️ 获取场景失败! " + _0x12ed82));
     }
   }
   async ["getSceneDetailPageInfoById"]() {
+    if (!sceneId) return null;
     const _0x4d081f = null,
       _0xd23c0b = {
         ILyLS:
@@ -1070,6 +1086,10 @@ class UserInfo {
     }
   }
   async ["getSceneStartPageInfoById"]() {
+    resourceFrom = "";
+    sectionId = "";
+    ip = "";
+    if (!sceneId) return false;
     const _0x27da9b = null,
       _0x46a261 = {
         emaVy: "get",
@@ -1091,17 +1111,22 @@ class UserInfo {
           },
         },
         _0x13c1b2 = await this["fetch"](_0x182772);
-      ((ip = _0x13c1b2?.["data"]?.["ip"]),
-        _0x46a261["oLDfg"](
-          _0x13c1b2?.["data"]?.["resourceFrom"]["indexOf"]("1"),
-          -0x1,
-        )
-          ? (resourceFrom = "1")
-          : (resourceFrom = "2"),
-        _0x13c1b2?.["data"]?.["resourceCardInfoDTOList"]["length"] &&
-          (sectionId =
-            _0x13c1b2?.["data"]?.["resourceCardInfoDTOList"][0x0]?.["id"]),
-        $["log"]("✅ 获取场景初始化信息: " + sceneId));
+      const data = _0x13c1b2?.data;
+      if (
+        !data ||
+        (!Array.isArray(data.resourceFrom) &&
+          !["string", "number"].includes(typeof data.resourceFrom))
+      ) {
+        $.log("⛔️ 场景初始化信息缺少 resourceFrom");
+        return false;
+      }
+      ip = data.ip || "";
+      const sources = String(data.resourceFrom).split(",");
+      if (!sources.includes("1") && !sources.includes("2")) return false;
+      resourceFrom = sources.includes("1") ? "1" : "2";
+      sectionId = data.resourceCardInfoDTOList?.[0]?.id || "";
+      $.log("✅ 获取场景初始化信息: " + sceneId);
+      return true;
     } catch (_0x5a0a85) {
       ((this["ckStatus"] = ![]),
         $["log"]("⛔️ 获取场景初始化信息失败! " + _0x5a0a85));
@@ -1137,12 +1162,15 @@ class UserInfo {
         _0x498020 = await this["fetch"](_0x23127f),
         { code: _0x4457a2, message: _0x20f985 } = _0x498020;
       console["log"](
-        (_0xe7b20a["ItIMg"](_0x4457a2, _0xe7b20a["MJYSj"]) ? "✅" : "⛔️") +
+        (String(_0x4457a2) === "200" ? "✅" : "⛔️") +
           " 开始场景: " +
           sceneId +
           ",\x20" +
           _0x20f985,
       );
+      const success = String(_0x4457a2) === "200";
+      if (!success) this.ckStatus = false;
+      return success;
     } catch (_0xcacf62) {
       ((this["ckStatus"] = ![]), $["log"]("⛔️ 开始场景失败! " + _0xcacf62));
     }
@@ -1176,12 +1204,15 @@ class UserInfo {
         _0x18d5eb = await this["fetch"](_0x549e7c),
         { code: _0x4e485d, message: _0x5ebc35 } = _0x18d5eb;
       console["log"](
-        (_0x4e485d === "200" ? "✅" : "⛔️") +
+        (String(_0x4e485d) === "200" ? "✅" : "⛔️") +
           " 结束场景: " +
           sceneId +
           ",\x20" +
           _0x5ebc35,
       );
+      const success = String(_0x4e485d) === "200";
+      if (!success) this.ckStatus = false;
+      return success;
     } catch (_0x169348) {
       ((this["ckStatus"] = ![]), $["log"]("⛔️ 结束场景失败! " + _0x169348));
     }
@@ -3591,7 +3622,7 @@ async function loadCheerio() {
   return require("cheerio");
 }
 async function run() {
-  console.log("阿里云社区青龙适配版 v2026.10.03.1");
+  console.log("阿里云社区青龙适配版 v2026.10.04.1");
   try {
     runtime.validateSettings(process.env);
     await checkEnv();
