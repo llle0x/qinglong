@@ -113,3 +113,12 @@ Surge 脚本控制台显示 `Result: {}` 仅表示脚本调用了结束接口，
 适配版优先调用青龙 `QLAPI.systemNotify` 使用系统设置中的 TG 配置；旧环境回退到 `sendNotify.js`。Cheerio 改为本地依赖，不再从外部代理下载并执行 JS。取消原版结束时固定 `process.exit(1)` 的行为，运行错误或账号状态异常才标记失败。日志调试强制关闭，不输出原始接口响应。
 
 本地验证：`npm install` 后运行 `npm test`。测试使用模拟接口，未登录真实阿里云账号或发布评论。
+
+### 我们的 Surge / BoxJS 阿里云 Cookie 同步
+
+1. 更新已有 BoxJS 订阅 `https://raw.githubusercontent.com/llle0x/qinglong/main/qinglong.boxjs.json`，出现“阿里云 → 青龙”。它与“爱奇艺 → 青龙”共用地址、Client ID、Client Secret，无需重复填写。只需青龙环境变量权限。
+2. 导入 Surge 模块：`https://raw.githubusercontent.com/llle0x/qinglong/main/surge/Aliyun-Qinglong.sgmodule`。
+3. 启用 `developer.aliyun.com` 的 MITM，确认 CA 证书已信任；打开阿里云 App → 首页 → 积分商城，匹配用户接口时捕获并同步。
+4. 检查青龙的 `aliyunWeb_data` 已更新。任务按青龙定时规则运行；本模块不自动触发任务。
+
+已有本地账号时，可以手动运行 `surge/aliyun-sync.js` 重试同步。同步按用户标识/昵称合并 JSON 账号数组，保留其他账号；目标存在歧义时停止。若青龙已有纯 Cookie 字符串，请先将它整理为含 `token`、`userId` 的账号 JSON 数组，脚本不会盲目覆盖原数据。不要与原作者的 Cookie 同步脚本同时启用相同匹配规则。
