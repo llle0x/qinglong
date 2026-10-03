@@ -1341,19 +1341,15 @@ class UserInfo {
             Referer: "https://developer.aliyun.com/live/" + _0x4538f3,
           },
         },
-        _0x436c79 = await this["fetch"](_0x32e09c),
-        _0x3b80cb = _0x53b51d["eFisk"](getJson, _0x436c79);
-      console["log"](
-        "✅\x20获取第\x20" +
-          _0x3917d4 +
-          " 秒弹幕: " +
-          JSON["stringify"](_0x3b80cb?.["data"]),
-      );
+        _0x436c79 = await this["fetch"](_0x32e09c);
+      const success = runtime.apiSuccess(runtime.decodeJsonResponse(_0x436c79));
+      if (!success) $.log("⛔️ 视频弹幕接口未返回成功，停止视频流程");
+      return success;
     } catch (_0x1899b3) {
       ((this["ckStatus"] = ![]), $["log"]("⛔️ 获取弹幕失败! " + _0x1899b3));
     }
   }
-  async ["online"](_0xf9cc65, _0x4b080b) {
+  async ["online"](_0xf9cc65, _0x4b080b, quiet = false) {
     const _0x5e4348 = null,
       _0x3dddd = {
         VdfAt: function (_0x1f8f9b, _0x591380) {
@@ -1385,9 +1381,10 @@ class UserInfo {
       const success = runtime.apiSuccess(
         runtime.decodeJsonResponse(await this.fetch(_0x54fd5b)),
       );
-      $.log(
-        `${success ? "✅" : "⛔️"} 在线心跳接口：${success ? "请求成功" : "未返回成功"}`,
-      );
+      if (!quiet || !success)
+        $.log(
+          `${success ? "✅" : "⛔️"} 在线心跳接口：${success ? "请求成功" : "未返回成功"}`,
+        );
       return success;
     } catch (_0x1be8cf) {
       ((this["ckStatus"] = ![]), $["log"]("⛔️ 在线心跳确认! " + _0x1be8cf));
@@ -1432,13 +1429,38 @@ class UserInfo {
         !(await this.play(detail.videoName, id, session))
       )
         return false;
-      for (let elapsed = 3; elapsed <= Math.ceil(seconds); elapsed += 3) {
-        await $.wait(3000);
-        await this.danmu(id, elapsed);
-        if (elapsed % 60 === 0 && !(await this.online(id, session)))
-          return false;
+      const started = Date.now(),
+        deadline = started + seconds * 1000;
+      let nextReport = 60;
+      $.log(
+        `视频等待开始：约 ${Math.ceil(seconds / 60)} 分钟，每分钟报告一次进度`,
+      );
+      // 同时限制真实经过时间与轮数，接口耗时计入等待，失败立即结束。
+      for (
+        let tick = 0;
+        tick < Math.ceil(seconds / 3) && Date.now() < deadline;
+        tick++
+      ) {
+        await $.wait(Math.min(3000, deadline - Date.now()));
+        const elapsed = Math.min(
+          Math.floor((Date.now() - started) / 1000),
+          Math.ceil(seconds),
+        );
+        if (Date.now() >= deadline) break;
+        if (!(await this.danmu(id, elapsed))) return false;
+        if (elapsed >= nextReport) {
+          if (!(await this.online(id, session, true))) return false;
+          $.log(
+            `视频进度：${Math.min(100, Math.floor((elapsed / seconds) * 100))}%（${elapsed}/${Math.ceil(seconds)} 秒）`,
+          );
+          nextReport = (Math.floor(elapsed / 60) + 1) * 60;
+        }
       }
-      if (!(await this.online(id, session))) return false;
+      if (Date.now() < deadline) {
+        $.log("⛔️ 视频计时异常，停止本次视频流程");
+        return false;
+      }
+      if (!(await this.online(id, session, true))) return false;
       $.log(`✅ 视频播放请求结束：${detail.videoName}；奖励以积分记录为准`);
       return true;
     }
@@ -3552,7 +3574,7 @@ async function loadCheerio() {
   return require("cheerio");
 }
 async function run() {
-  console.log("阿里云社区青龙适配版 v2026.10.04.2");
+  console.log("阿里云社区青龙适配版 v2026.10.04.3");
   try {
     runtime.validateSettings(process.env);
     await checkEnv();

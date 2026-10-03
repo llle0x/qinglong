@@ -95,15 +95,26 @@ test("Weekly checkpoint uses Beijing Monday and isolates accounts without saving
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
-async function morningRun({ catalogHtml = html, denyLike = false } = {}) {
+async function morningRun({
+  catalogHtml = html,
+  denyLike = false,
+  duration = 1,
+  networkDelay = 0,
+  advanceClock = true,
+} = {}) {
   const calls = [],
     notices = [],
     marks = new Set();
+  const logs = [];
+  let fakeNow = Date.parse("2026-10-04T07:00:00+08:00");
   class MockEnv extends runtime.Env {
-    wait() {
+    wait(ms) {
+      if (advanceClock) fakeNow += Math.max(1000, Number(ms) || 1000);
       return Promise.resolve();
     }
-    log() {}
+    log(...messages) {
+      logs.push(messages.join(" "));
+    }
   }
   const fakeRuntime = {
     ...runtime,
@@ -114,7 +125,8 @@ async function morningRun({ catalogHtml = html, denyLike = false } = {}) {
     }),
     notify: async (title, body) => notices.push(body),
     request: async (opts) => {
-      calls.push(opts);
+      calls.push({ ...opts, time: fakeNow });
+      if (advanceClock) fakeNow += networkDelay;
       if (opts.url.includes("/my/score/")) return { code: "200", data: 100 };
       if (opts.url.includes("getUserSpaceSignInDetail"))
         return { code: "200", data: { taskGroupId: "current" } };
@@ -150,7 +162,7 @@ async function morningRun({ catalogHtml = html, denyLike = false } = {}) {
       if (opts.url.includes("/live/open/detail"))
         return {
           code: "200",
-          data: { live: { name: "current-video", duration: 1 } },
+          data: { live: { name: "current-video", duration } },
         };
       return { code: "200", data: 1, message: "OK" };
     },
@@ -163,7 +175,7 @@ async function morningRun({ catalogHtml = html, denyLike = false } = {}) {
       return 7;
     }
     static now() {
-      return Date.parse("2026-10-04T07:00:00+08:00");
+      return fakeNow;
     }
   }
   const fakeProcess = {
@@ -190,7 +202,7 @@ async function morningRun({ catalogHtml = html, denyLike = false } = {}) {
     c.url.includes("likeOrNotLike"),
   ).length;
   await context.module.exports.run();
-  return { calls, notices, marks, firstCount, fakeProcess };
+  return { calls, notices, marks, firstCount, fakeProcess, logs };
 }
 test("Morning run uses current weekly tasks and avoids removed comments, scenes and unfavoriting", async () => {
   const result = await morningRun();
@@ -244,4 +256,28 @@ test("Unavailable task catalog does not fall back to obsolete reward actions", a
     ),
   );
   assert.equal(result.fakeProcess.exitCode, 1);
+});
+
+test("Long video uses elapsed clock time, reports only minute progress and never dumps danmu content", async () => {
+  const result = await morningRun({ duration: 1309, networkDelay: 1000 });
+  assert.ok(result.marks.has("观看视频"));
+  const polls = result.calls.filter((c) => c.url.includes("/live/open/danmu"));
+  assert.ok(polls.length < Math.ceil(1309 / 3));
+  assert.ok(
+    result.logs.filter((line) => line.startsWith("视频进度：")).length <= 22,
+  );
+  assert.ok(result.logs.every((line) => !line.includes("秒弹幕:")));
+  const start = result.calls.find((c) => c.url.includes("/live/open/play"));
+  const heartbeats = result.calls.filter((c) =>
+    c.url.includes("/live/open/online"),
+  );
+  assert.ok(heartbeats.at(-1).time - start.time <= 1312 * 1000);
+});
+test("Stalled video clock cannot cause endless polling or a successful weekly checkpoint", async () => {
+  const result = await morningRun({ duration: 9, advanceClock: false });
+  assert.equal(result.marks.has("观看视频"), false);
+  assert.ok(
+    result.calls.filter((c) => c.url.includes("/live/open/danmu")).length <= 6,
+  );
+  assert.ok(result.logs.some((line) => line.includes("视频计时异常")));
 });
