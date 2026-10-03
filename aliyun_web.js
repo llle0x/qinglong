@@ -92,9 +92,31 @@ async function main() {
           account.ckStatus = false;
           report(`⛔️ ${error.message}`);
         }
+        let rewards = [],
+          rewardsReady = true;
+        if (catalog.length && process.env.aliyunWeb_reward_check !== "false") {
+          try {
+            rewards = await runtime.readReceivedRewards((params) =>
+              account.fetch({
+                url: "/my/score/listScoreLogByPage",
+                type: "get",
+                params,
+              }),
+            );
+            report("已核对官网积分领取明细；按领取时间判断本周期奖励记录。");
+          } catch (error) {
+            rewardsReady = false;
+            account.ckStatus = false;
+            report(`⛔️ ${error.message}`);
+          }
+        }
         const eligible = (title) => {
           const task = catalog.find((item) => item.title === title);
-          if (!task) return null;
+          if (!task || !rewardsReady) return null;
+          if (runtime.hasReceivedReward(rewards, task)) {
+            report(`⏭️ ${title}：本周期已有官网奖励领取记录，跳过`);
+            return null;
+          }
           if (
             process.env.aliyunWeb_dedupe !== "false" &&
             state.has(account, task)
@@ -3574,7 +3596,7 @@ async function loadCheerio() {
   return require("cheerio");
 }
 async function run() {
-  console.log("阿里云社区青龙适配版 v2026.10.04.3");
+  console.log("阿里云社区青龙适配版 v2026.10.04.4");
   try {
     runtime.validateSettings(process.env);
     await checkEnv();
