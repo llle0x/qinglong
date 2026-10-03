@@ -200,7 +200,7 @@ Surge 脚本控制台显示 `Result: {}` 仅表示脚本调用了结束接口，
 基于自己 [Surge 仓库的九号脚本](https://github.com/llle0x/Surge/blob/main/Scripts/ninebot.js) 适配，原流程来源于凉心（52Lxcloud/ScriptKit）。青龙运行根目录 `ninebot.js`，不要运行 Surge 原脚本。Node.js 18.17 或以上，无额外依赖，也不需要本仓库 lib 文件。
 
 1. 仓库订阅白名单改为 `^(iQIYI|aliyun_web|ninebot)\.js$`，重新拉取。
-2. 更新已有 BoxJS 订阅，在“九号出行 · 本地登录数据”的数据中复制 `Ninebot.Accounts.SurgeV2` 的完整 JSON 数组。若没有这个键，先在 Surge 启用九号抓取模块，再打开九号 App 签到页面获取数据。旧的 `Ninebot.Accounts` 是另一种格式，不能直接填入此版本。
+2. 更新已有 BoxJS 订阅，在“九号出行 → 青龙”的数据中复制 `Ninebot.Accounts.SurgeV2` 的完整 JSON 数组。若没有这个键，先在 Surge 启用九号抓取模块，再打开九号 App 签到页面获取数据。旧的 `Ninebot.Accounts` 是另一种格式，不能直接填入此版本。
 3. 青龙创建并启用环境变量 `NINEBOT_ACCOUNTS`，值为上述 JSON 数组。请保留捕获的 `tokenHeader`、`deviceHeader`，以及有时同时存在的 `authorization`，不要只复制 Token。示例（值需换成自己真实捕获的值）：
 
 ```json
@@ -218,4 +218,14 @@ Surge 脚本控制台显示 `Result: {}` 仅表示脚本调用了结束接口，
 
 支持多账号，先查签到状态，已签到就跳过；提交后再查询状态确认成功；单个账号失败不会阻止其他账号。优先使用青龙系统通知设置（含 TG），旧版本回退 sendNotify。`NINEBOT_NOTIFY=off` 可关闭通知。请求限定九号固定 HTTPS 接口、不跟随跳转，每个请求超时 15 秒。日志只含账号序号和签到结果，不打印凭证或接口原始错误信息。
 
-没有使用真实 Token 验证当前接口及 N 币奖励。BoxJS 此入口仅展示手机本地数据，不会自动传给青龙；Token 更新后需重新复制。转由青龙签到后，可关闭 Surge 的 `Ninebot_Checkin` 定时项，保留 `Ninebot_Header` 捕获项。
+没有使用真实 Token 验证当前接口及 N 币奖励。九号已接入通用同步模块，按下面步骤可自动更新凭证。转由青龙签到后，可关闭 Surge 的 `Ninebot_Checkin` 定时项，如采用原模块手动复制数据，可保留 `Ninebot_Header`；采用通用自动同步时按下文关闭该项。
+
+### 九号自动同步（共用通用模块）
+
+1. 更新 BoxJS 青龙订阅及 Surge 的 `Qinglong-Sync.sgmodule` 通用同步模块；本次模块新增了九号请求捕获和 `cn-cbu-gateway.ninebot.com` 的 MITM 域名，**仅更新 JS 缓存不足以添加这些配置**。
+2. 沿用“通用凭证 → 青龙”的青龙地址、Client ID / Secret（应用需有环境变量权限）。确认 Surge MITM 证书已信任、九号域名已启用解密。
+3. 原 Surge 九号模块的 `Ninebot_Header` 捕获项应关闭，避免与通用模块争用同一请求；签到转到青龙后也关闭原 `Ninebot_Checkin` 定时项。
+4. 打开九号 App 签到页面。通用模块保存账号到原 `Ninebot.Accounts.SurgeV2`，自动创建或更新青龙 `NINEBOT_ACCOUNTS`。首次无需再复制 JSON。
+5. 已有本地账号时，也可手动运行 `surge/qinglong-sync.js`，无需重新抓取；不要把该 Surge 脚本放进青龙运行。
+
+按设备 ID 合并多账号，保留其他设备账号及捕获的请求头类型。不覆盖禁用、无法唯一确定或格式异常的青龙变量。共用一个模块及一套青龙连接配置，不额外安装九号同步模块。同步只更新凭证，签到仍按青龙计划运行。手机必须能访问青龙；本版本不新增定时同步，Token 更新由打开签到页面触发。

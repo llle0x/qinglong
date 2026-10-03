@@ -8,14 +8,15 @@
     {
       "id": "llle0x.qinglong.sync",
       "name": "通用凭证 → 青龙",
-      "desc": "爱奇艺、阿里云及自定义网站共用一个同步模块。新凭证留空时沿用之前的爱奇艺/阿里云青龙配置。",
+      "desc": "爱奇艺、阿里云、九号出行及自定义网站共用一个同步模块。新凭证留空时沿用之前的爱奇艺/阿里云青龙配置。",
       "keys": [
         "qinglong_sync_url",
         "qinglong_sync_client_id",
         "qinglong_sync_client_secret",
         "qinglong_sync_rules",
         "CookieQY",
-        "aliyunWeb_data"
+        "aliyunWeb_data",
+        "Ninebot.Accounts.SurgeV2"
       ],
       "settings": [
         {
@@ -114,8 +115,8 @@
     },
     {
       "id": "llle0x.qinglong.ninebot",
-      "name": "九号出行 · 本地登录数据",
-      "desc": "读取 Surge 九号签到模块保存的账号 JSON，复制到青龙 NINEBOT_ACCOUNTS。凭证只在手机本地查看，不要公开分享或上传备份。此入口不自动同步。",
+      "name": "九号出行 → 青龙",
+      "desc": "通用同步模块自动捕获九号 Token 与设备 ID，同步到 NINEBOT_ACCOUNTS。可手动运行通用脚本同步本地已有数据。凭证仅在手机本地填写，勿公开分享。",
       "keys": ["Ninebot.Accounts.SurgeV2", "Ninebot.Accounts"]
     }
   ]

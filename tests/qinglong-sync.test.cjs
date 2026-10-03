@@ -228,3 +228,91 @@ test("Raw multi-account variables and ambiguous destinations are preserved", asy
     assert.equal(result.notifications.length, 1);
   }
 });
+const ninebot = {
+  deviceId: "device-1",
+  token: "private-cookie",
+  tokenHeader: "access-token",
+  deviceHeader: "device-id",
+  authorization: "Bearer private-cookie",
+};
+test("Ninebot captures both authentication headers and merges remote devices", async () => {
+  const result = await run({
+    request: {
+      url: "https://cn-cbu-gateway.ninebot.com/portal/api/user-sign/v2/status",
+      headers: {
+        "Access-Token": ninebot.token,
+        Authorization: ninebot.authorization,
+        "Device-Id": ninebot.deviceId,
+      },
+    },
+    remote: {
+      NINEBOT_ACCOUNTS: [
+        {
+          id: 9,
+          name: "NINEBOT_ACCOUNTS",
+          value: JSON.stringify([
+            { ...ninebot, token: "old" },
+            { ...ninebot, deviceId: "device-2", token: "other" },
+          ]),
+        },
+      ],
+    },
+  });
+  const payload = writes(result)[0];
+  assert.equal(payload.name, "NINEBOT_ACCOUNTS");
+  assert.deepEqual(JSON.parse(payload.value), [
+    ninebot,
+    { ...ninebot, deviceId: "device-2", token: "other" },
+  ]);
+  assert.deepEqual(JSON.parse(result.store.get("Ninebot.Accounts.SurgeV2")), [
+    ninebot,
+  ]);
+});
+test("Ninebot manual sync reads original Surge storage and removes stale secondary authorization", async () => {
+  const fresh = {
+    deviceId: "device-1",
+    token: "fresh",
+    tokenHeader: "access-token",
+    deviceHeader: "device_id",
+  };
+  const result = await run({
+    values: { "Ninebot.Accounts.SurgeV2": JSON.stringify([fresh]) },
+    remote: {
+      NINEBOT_ACCOUNTS: [
+        { id: 1, name: "NINEBOT_ACCOUNTS", value: JSON.stringify([ninebot]) },
+      ],
+    },
+  });
+  assert.deepEqual(JSON.parse(writes(result)[0].value), [fresh]);
+});
+test("Ninebot capture stores locally before configuration and ignores OPTIONS", async () => {
+  const request = {
+    url: "https://cn-cbu-gateway.ninebot.com/app-api/api/user-sign/v2/status",
+    headers: { authorization: "private-cookie", device_id: "device-1" },
+  };
+  const result = await run({ request, configured: false });
+  assert.equal(result.calls.length, 0);
+  assert.equal(
+    JSON.parse(result.store.get("Ninebot.Accounts.SurgeV2"))[0].deviceHeader,
+    "device_id",
+  );
+  const preflight = await run({ request: { ...request, method: "OPTIONS" } });
+  assert.equal(preflight.calls.length, 0);
+  assert.equal(preflight.notifications.length, 0);
+});
+test("Ninebot malformed remote or duplicate device IDs are not overwritten", async () => {
+  for (const value of [
+    JSON.stringify([ninebot, ninebot]),
+    "device:token",
+    JSON.stringify([{ deviceId: "d", token: "t", tokenHeader: "Cookie" }]),
+  ]) {
+    const result = await run({
+      values: { "Ninebot.Accounts.SurgeV2": JSON.stringify([ninebot]) },
+      remote: {
+        NINEBOT_ACCOUNTS: [{ id: 1, name: "NINEBOT_ACCOUNTS", value }],
+      },
+    });
+    assert.equal(writes(result).length, 0);
+    assert.equal(result.notifications.length, 1);
+  }
+});

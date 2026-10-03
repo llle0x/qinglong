@@ -29,6 +29,16 @@ const DEFAULT_RULES = [
     avatarPath: "data.avatar",
     remarks: "Surge Aliyun",
   },
+  {
+    id: "ninebot",
+    name: "九号出行",
+    pattern:
+      "^https://cn-cbu-gateway\\.ninebot\\.com/(?:portal|app-api)/api/user-sign/",
+    envName: "NINEBOT_ACCOUNTS",
+    storageKey: "Ninebot.Accounts.SurgeV2",
+    kind: "ninebot",
+    remarks: "Surge Ninebot",
+  },
 ];
 function read(key) {
   return $persistentStore.read(key) || "";
@@ -56,7 +66,7 @@ function loadRules() {
       !/^[A-Za-z_]\w*$/.test(rule.envName || "") ||
       typeof rule.storageKey !== "string" ||
       !rule.storageKey ||
-      !["raw", "accounts"].includes(rule.kind)
+      !["raw", "accounts", "ninebot"].includes(rule.kind)
     )
       throw new Error("规则缺少有效 pattern、envName、storageKey 或 kind");
     try {
@@ -84,7 +94,7 @@ function atPath(value, path) {
       value,
     );
 }
-function parseAccounts(value) {
+function parseAccounts(value, kind = "accounts") {
   let rows;
   try {
     rows = JSON.parse(value || "[]");
@@ -92,6 +102,37 @@ function parseAccounts(value) {
     throw new Error("账号数据必须为 JSON 数组，原数据未被覆盖");
   }
   rows = Array.isArray(rows) ? rows : [rows];
+  if (kind === "ninebot") {
+    const valid = (value) =>
+      typeof value === "string" &&
+      value.trim() &&
+      !/[\x00-\x1f\x7f]/.test(value);
+    if (
+      rows.length > 50 ||
+      rows.some(
+        (row) =>
+          !row ||
+          !valid(row.deviceId) ||
+          !valid(row.token) ||
+          (row.authorization !== undefined && !valid(row.authorization)) ||
+          (row.tokenHeader !== undefined &&
+            !["access-token", "authorization"].includes(row.tokenHeader)) ||
+          (row.deviceHeader !== undefined &&
+            !["device-id", "device_id"].includes(row.deviceHeader)),
+      )
+    )
+      throw new Error("九号账号数据格式异常，原数据未被覆盖");
+    const ids = rows.map((row) => row.deviceId.trim());
+    if (new Set(ids).size !== ids.length)
+      throw new Error("九号设备 ID 重复，停止同步");
+    return rows.map((row) => ({
+      deviceId: row.deviceId.trim(),
+      token: row.token.trim(),
+      tokenHeader: row.tokenHeader || "authorization",
+      deviceHeader: row.deviceHeader || "device_id",
+      ...(row.authorization ? { authorization: row.authorization.trim() } : {}),
+    }));
+  }
   if (
     rows.some(
       (row) =>
@@ -104,7 +145,17 @@ function parseAccounts(value) {
     throw new Error("账号数据缺少 token 或账号标识");
   return rows;
 }
-function mergeAccounts(existing, incoming) {
+function mergeAccounts(existing, incoming, kind = "accounts") {
+  if (kind === "ninebot") {
+    const result = existing.map((row) => ({ ...row }));
+    for (const row of incoming) {
+      const index = result.findIndex((item) => item.deviceId === row.deviceId);
+      if (index >= 0) result[index] = { ...row };
+      else result.push({ ...row });
+    }
+    if (result.length > 50) throw new Error("九号账号超过 50 个，停止同步");
+    return result;
+  }
   const result = existing.map((row) => ({ ...row }));
   for (const row of incoming) {
     const matches = result
@@ -129,6 +180,27 @@ function headerValue(headers, name) {
   return key ? headers[key] : "";
 }
 function capture(rule, request, response) {
+  if (rule.kind === "ninebot") {
+    const headers = request.headers || {};
+    const accessToken = headerValue(headers, "access-token");
+    const authorization = headerValue(headers, "authorization");
+    const hyphenId = headerValue(headers, "device-id");
+    const row = {
+      deviceId: hyphenId || headerValue(headers, "device_id"),
+      token: accessToken || authorization,
+      tokenHeader: accessToken ? "access-token" : "authorization",
+      deviceHeader: hyphenId ? "device-id" : "device_id",
+    };
+    if (accessToken && authorization) row.authorization = authorization;
+    const incoming = parseAccounts(JSON.stringify([row]), "ninebot");
+    return JSON.stringify(
+      mergeAccounts(
+        parseAccounts(read(rule.storageKey), "ninebot"),
+        incoming,
+        "ninebot",
+      ),
+    );
+  }
   let body;
   const responseBody = () => {
     if (body === undefined) {
@@ -235,11 +307,12 @@ async function upsert(rule, localValue, base, token) {
   if (existing && Number(existing.status) === 1)
     throw new Error("目标变量已禁用，请先在青龙确认");
   let value = localValue;
-  if (rule.kind === "accounts")
+  if (["accounts", "ninebot"].includes(rule.kind))
     value = JSON.stringify(
       mergeAccounts(
-        existing ? parseAccounts(existing.value) : [],
-        parseAccounts(localValue),
+        existing ? parseAccounts(existing.value, rule.kind) : [],
+        parseAccounts(localValue, rule.kind),
+        rule.kind,
       ),
     );
   else if (existing && /[\r\n]/.test(existing.value || ""))
@@ -259,7 +332,7 @@ async function upsert(rule, localValue, base, token) {
   return true;
 }
 async function run() {
-  console.log("通用青龙同步 v2026.10.03.1");
+  console.log("通用青龙同步 v2026.10.04.1");
   const rules = loadRules();
   const request = typeof $request === "undefined" ? null : $request;
   let selected = rules;
@@ -267,7 +340,11 @@ async function run() {
     selected = rules.filter((rule) =>
       new RegExp(rule.pattern).test(request.url),
     );
-    if (!selected.length) return;
+    if (
+      !selected.length ||
+      String(request.method || "GET").toUpperCase() === "OPTIONS"
+    )
+      return;
     if (selected.length > 1)
       throw new Error("请求同时匹配多条规则，请缩小捕获范围");
     const rule = selected[0];
