@@ -69,6 +69,7 @@ async function sync() {
   console.log('已取得访问令牌，正在查询 IQIYI_COOKIE。');
   const rows = await call('get', `${base}/open/envs?searchValue=${ENV_NAME}`, auth.token);
   const existing = chooseEnv(rows);
+  if (existing && /[\r\n]/.test(existing.value || '')) throw new Error('目标变量包含多账号；手机同步为单账号模式，请使用单独的 IQIYI_COOKIE 变量，避免覆盖其他账号');
   if (existing && Number(existing.status) === 1) throw new Error('目标环境变量已禁用，请在青龙中确认后启用');
   if (existing && existing.value === cookie) return 'Cookie 未变化，无需更新';
   if (existing) {

@@ -6,7 +6,7 @@ name: 爱奇艺会员签到
 修改日期：2026-10-03。改用内置网络和 MD5，严格校验 Cookie，禁止凭证日志。
 许可证：GPL-3.0，见 LICENSE。原签到、抽奖和任务接口逻辑保留。
 cron: 10 9 * * *
-环境变量：IQIYI_COOKIE（单账号）。无需额外依赖，Node.js >= 18。
+环境变量：IQIYI_COOKIE（多账号每行一个）；IQIYI_WEB_TASKS=1 启用网页版任务。无需额外依赖，Node.js >= 18。
 */
 'use strict';
 const https = require('node:https');
@@ -26,9 +26,11 @@ function parseCookie(value) {
     const i = s.indexOf('=');
     return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)];
   }));
-  const missing = ['P00001', 'P00003', '__dfp'].filter(k => !fields[k]);
+  fields.P00003 = fields.P00003 || fields.P00010;
+  fields.__dfp = fields.__dfp || fields.dfp || '';
+  const missing = ['P00001', 'P00003'].filter(k => !fields[k]);
   if (missing.length) throw inputError(`IQIYI_COOKIE 缺少字段：${missing.join('、')}；请重新获取完整 Cookie`);
-  if (['P00001', 'P00003', '__dfp'].some(k => /[\x00-\x1f\x7f]/.test(fields[k]))) throw inputError('Cookie 关键字段包含控制字符，请重新获取完整 Cookie');
+  if (['P00001', 'P00003', '__dfp'].some(k => /[\x00-\x1f\x7f]/.test(fields[k] || ''))) throw inputError('Cookie 关键字段包含控制字符，请重新获取完整 Cookie');
   return fields;
 }
 function request(options, callback, method = 'GET') {
@@ -65,15 +67,89 @@ const $nobyda = {
   get: (opts, cb) => request(opts, cb),
   post: (opts, cb) => request(opts, cb, 'POST')
 };
-async function main() {
-  console.log('爱奇艺青龙脚本 v2026.10.03.4');
-  const fields = parseCookie(process.env.IQIYI_COOKIE);
-  console.log('Cookie 三个必需字段校验通过，开始请求爱奇艺接口。');
+function parseAccounts(value) {
+  if (!String(value || '').trim()) return [String(value || '')];
+  return String(value).split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+}
+function redact(text, cookies) {
+  let result = String(text);
+  const secrets = new Set();
+  for (const cookie of cookies) {
+    if (cookie) secrets.add(cookie);
+    for (const item of cookie.split(';')) {
+      const at = item.indexOf('=');
+      if (at >= 0) {
+        const value = item.slice(at + 1).trim();
+        if (value) { secrets.add(value); secrets.add(encodeURIComponent(value)); }
+      }
+    }
+  }
+  for (const secret of [...secrets].sort((a, b) => b.length - a.length)) result = result.split(secret).join('[已隐藏]');
+  return result;
+}
+async function sendSummary(title, body, failed, cookies, loader = require) {
+  const mode = process.env.IQIYI_NOTIFY || 'all';
+  if (mode === 'off' || (mode === 'errors' && !failed)) return;
+  let notify;
+  for (const path of ['./sendNotify.js', '../sendNotify.js', '/ql/data/scripts/sendNotify.js', '/ql/scripts/sendNotify.js']) {
+    try {
+      const resolved = loader.resolve(path);
+      const helper = loader(resolved);
+      if (typeof helper.sendNotify === 'function') { notify = helper.sendNotify; break; }
+    } catch (_) { /* 某些青龙安装未提供该路径，继续尝试标准位置。 */ }
+  }
+  if (!notify) {
+    console.warn('未找到青龙 sendNotify.js；签到结果已保留在日志。请配置通知渠道并提供青龙通知文件。');
+    return;
+  }
+  try {
+    await notify(title, redact(body, cookies));
+    console.log('已调用青龙通知模块；送达结果请查看通知模块日志。');
+  } catch (_) {
+    console.warn('青龙通知调用失败，请检查通知渠道配置。');
+  }
+}
+async function main({ runner = runAccount, notifier = sendSummary } = {}) {
+  console.log('爱奇艺青龙脚本 v2026.10.03.5');
+  const cookies = parseAccounts(process.env.IQIYI_COOKIE);
+  const summaries = [];
+  let failed = false;
+  for (const [index, cookie] of cookies.entries()) {
+    try {
+      const result = await runner(cookie);
+      summaries.push(`账号 ${index + 1}\n${result.text}`);
+      failed = failed || result.failed;
+    } catch (error) {
+      const reason = error.safeMessage || '执行异常，请检查日志中的网络及接口状态';
+      console.error(`账号 ${index + 1} 任务失败：${reason}`);
+      summaries.push(`账号 ${index + 1}\n任务失败：${reason}`);
+      failed = true;
+    }
+  }
+  await notifier('爱奇艺签到', summaries.join('\n\n────────\n\n'), failed, cookies);
+  if (failed) process.exitCode = 1;
+  console.log('爱奇艺任务执行结束，请查看各接口结果。');
+}
+async function runAccount(cookie) {
+  pushMsg.length = 0;
+  delete $nobyda.stop;
+  delete $nobyda.expire;
+  const fields = parseCookie(cookie);
   P00001 = fields.P00001;
   P00003 = fields.P00003;
   DFP = fields.__dfp;
+  console.log('Cookie 必需字段已读取，开始请求爱奇艺接口。');
   await login();
   await Checkin();
+  if (process.env.IQIYI_WEB_TASKS === '1') {
+    if (DFP) {
+      await webCheckin();
+      await new Promise(r => setTimeout(r, 1000));
+      await webtask();
+    } else {
+      report('网页版任务跳过：Cookie 缺少 dfp / __dfp');
+    }
+  }
   for (let i = 0; i < 3; i++) {
     if (!await Lottery(i)) break;
     await new Promise(r => setTimeout(r, 1000));
@@ -85,7 +161,46 @@ async function main() {
     await new Promise(r => setTimeout(r, 1000));
     await getTaskRewards(task);
   }
-  console.log('爱奇艺任务执行结束，请查看各接口结果。');
+  const text = [`会员到期：${$nobyda.expire || '查询未成功'}`, ...pushMsg].join('\n');
+  return { text, failed: /❌|⚠️|失败|无效|出错/.test(text) };
+}
+function report(message) { pushMsg.push(message); console.log(message); }
+function jsonGet(url) {
+  return new Promise((resolve, reject) => request(url, (error, response, body) => {
+    if (error) return reject(error);
+    try { resolve(JSON.parse(body)); } catch (_) { reject(new Error('接口数据解析失败')); }
+  }));
+}
+async function webCheckin() {
+  const params = webParams('sign_pcw');
+  try {
+    const sign = k('UKobMjDMsDoScuWOfp6F', params, { split: '|', sort: true, splitSecretKey: true });
+    const obj = await jsonGet(`https://community.iqiyi.com/openApi/score/add?${w(params)}&sign=${sign}`);
+    if (obj.code === 'A00000' && obj.data?.[0]?.code === 'A0000') {
+      report(`网页签到：积分+${obj.data[0].score}，累计 ${obj.data[0].continuousValue} 天`);
+    } else report('网页签到失败：接口未返回成功状态');
+  } catch (_) { report('网页签到失败：网络或响应数据异常'); }
+}
+function webParams(channelCode) {
+  return {
+    agenttype: '1', agentversion: '0', appKey: 'basic_pca', appver: '0',
+    authCookie: P00001, channelCode, dfp: DFP, scoreType: '1', srcplatform: '1',
+    typeCode: 'point', userId: P00003,
+    user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    verticalCode: 'iQIYI'
+  };
+}
+async function webtask() {
+  const params = webParams('paopao_pcw');
+  const sign = k('UKobMjDMsDoScuWOfp6F', params, { split: '|', sort: true, splitSecretKey: true });
+  const query = `${w(params)}&sign=${sign}`;
+  try {
+    const obj = await jsonGet(`https://community.iqiyi.com/openApi/task/complete?${query}`);
+    if (obj.code !== 'A00000') { report('网页热点任务失败：接口未返回成功状态'); return; }
+    const reward = await jsonGet(`https://community.iqiyi.com/openApi/score/getReward?${query}`);
+    if (reward.code === 'A00000') report(`网页热点任务：积分+${reward.data?.score || 0}`);
+    else report('网页热点奖励领取失败');
+  } catch (_) { report('网页热点任务失败：网络或响应数据异常'); }
 }
 function login() {
   return new Promise(resolve => {
@@ -205,7 +320,7 @@ function Lottery(s) {
         const obj = JSON.parse(data);
         if (obj.title) {
           LotteryMsg = `应用抽奖: ${obj.title != '影片推荐' && obj.awardName || '未中奖'} 🎉`;
-          LotteryMsg = obj.kv.code == 'Q00702' && `应用抽奖: 您的抽奖次数已经用完 ⚠️` || LotteryMsg;
+          LotteryMsg = obj.kv.code == 'Q00702' && `应用抽奖: 今日抽奖次数已用完` || LotteryMsg;
           $nobyda.stop = obj.kv.code == 'Q00702';
         } else if (obj.kv.code == 'Q00304') {
           LotteryMsg = `应用抽奖: Cookie无效 ⚠️`;
@@ -337,8 +452,8 @@ function w() {
     t.join("&")
 }
 
-module.exports = { parseCookie, request, main, encodeQuery: w };
+module.exports = { parseCookie, parseAccounts, redact, sendSummary, request, main, encodeQuery: w };
 if (require.main === module) main().catch(error => {
-  console.error(`任务失败：${error.safeMessage || '执行异常；请根据上方接口日志检查网络及接口状态'}`);
+  console.error('任务执行或通知汇总异常，请查看上方日志。');
   process.exitCode = 1;
 });
