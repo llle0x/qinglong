@@ -122,3 +122,42 @@ Surge 脚本控制台显示 `Result: {}` 仅表示脚本调用了结束接口，
 4. 检查青龙的 `aliyunWeb_data` 已更新。任务按青龙定时规则运行；本模块不自动触发任务。
 
 已有本地账号时，可以手动运行 `surge/aliyun-sync.js` 重试同步。同步按用户标识/昵称合并 JSON 账号数组，保留其他账号；目标存在歧义时停止。若青龙已有纯 Cookie 字符串，请先将它整理为含 `token`、`userId` 的账号 JSON 数组，脚本不会盲目覆盖原数据。不要与原作者的 Cookie 同步脚本同时启用相同匹配规则。
+
+## 通用 Surge / BoxJS 凭证同步（推荐）
+
+现在可以只启用一个 [通用模块](https://raw.githubusercontent.com/llle0x/qinglong/main/surge/Qinglong-Sync.sgmodule)，同时同步爱奇艺和阿里云；不再为每个任务单独安装同步模块。它只同步环境变量，任务仍按青龙计划运行。
+
+1. 更新 [BoxJS 青龙订阅](https://raw.githubusercontent.com/llle0x/qinglong/main/qinglong.boxjs.json)，打开“通用凭证 → 青龙”。地址、Client ID、Secret 留空时自动沿用原配置；首次使用才需要填写。应用只需环境变量权限。
+2. 禁用之前的爱奇艺和阿里云同步模块，以及相同地址的其他 Cookie 捕获脚本；导入通用模块。启用 MITM 并信任证书。
+3. 打开爱奇艺登录页面或阿里云积分商城，捕获后自动同步到 `IQIYI_COOKIE` 或 `aliyunWeb_data`。已保存的 `CookieQY` 和 `aliyunWeb_data` 会继续使用。
+4. 需要重试时，在 Surge 手动运行 [通用同步脚本](https://raw.githubusercontent.com/llle0x/qinglong/main/surge/qinglong-sync.js)，一次同步所有已保存凭证。没有自动定时重试；凭证不变时跳过更新通知。
+
+爱奇艺仍为单账号更新；阿里云按账号标识合并 JSON 数组并保留其他账号。目标变量已禁用、多个同名变量无法唯一匹配、原数据格式不兼容时停止对应变量更新，手动同步时继续其他网站。
+
+### 添加其他网站
+
+通用脚本并不能自动识别任意网站的登录信息。新网站只需添加捕获规则，不需要新建 JS：在 BoxJS“自定义同步规则”填写 JSON 数组，再编辑通用模块的“捕获匹配”参数加入该网站接口，并在 Surge MITM 中加入域名。三个位置的地址必须一致。
+
+以下是格式示例，需按真实网站和任务变量名修改：
+
+```json
+[
+  {
+    "id": "my_site",
+    "name": "我的网站",
+    "pattern": "^https://api\\.example\\.com/account$",
+    "envName": "MY_COOKIE",
+    "storageKey": "my_site_cookie",
+    "kind": "raw",
+    "header": "Cookie"
+  }
+]
+```
+
+- 默认从请求头捕获。`header` 可改为 `Authorization`，其完整值原样同步；若任务需要剥离 `Bearer ` 或其他转换，需要另行适配。
+- `captureFrom: "response-header"` 从响应头读取；`captureFrom: "response-json"` 配合 `valuePath: "data.token"` 从响应 JSON 读取字符串。
+- `kind: "raw"` 同步单个字符串。阿里云内置 `accounts` 格式按账号合并，并读取响应中的账号字段。
+- 自定义规则使用相同 `id` 可修改内置规则；例如 `[{"id":"aliyun","enabled":false}]` 禁用阿里云同步。
+- 每条规则应对应唯一环境变量、独立本地存储键和精确接口地址；一条请求匹配多条规则时停止，避免凭证写错位置。仅拦截需同步的网站。
+
+所有规则共用一套青龙应用凭证。不同网站可能使用不同身份验证机制，是否能通过 Surge 捕获仍需逐个确认。验证使用模拟接口，未连接真实手机或账号。

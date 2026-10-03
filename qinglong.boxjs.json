@@ -6,6 +6,49 @@
   "repo": "https://github.com/llle0x/qinglong",
   "apps": [
     {
+      "id": "llle0x.qinglong.sync",
+      "name": "通用凭证 → 青龙",
+      "desc": "爱奇艺、阿里云及自定义网站共用一个同步模块。新凭证留空时沿用之前的爱奇艺/阿里云青龙配置。",
+      "keys": [
+        "qinglong_sync_url",
+        "qinglong_sync_client_id",
+        "qinglong_sync_client_secret",
+        "qinglong_sync_rules",
+        "CookieQY",
+        "aliyunWeb_data"
+      ],
+      "settings": [
+        {
+          "id": "qinglong_sync_url",
+          "name": "青龙面板根地址",
+          "val": "",
+          "type": "text",
+          "desc": "留空沿用原配置；填写时不要加 /open。"
+        },
+        {
+          "id": "qinglong_sync_client_id",
+          "name": "Client ID",
+          "val": "",
+          "type": "text",
+          "desc": "留空沿用原配置。"
+        },
+        {
+          "id": "qinglong_sync_client_secret",
+          "name": "Client Secret",
+          "val": "",
+          "type": "text",
+          "desc": "留空沿用原配置；凭证仅本地保存，不要公开备份。"
+        },
+        {
+          "id": "qinglong_sync_rules",
+          "name": "自定义同步规则（JSON 数组）",
+          "val": "[]",
+          "type": "text",
+          "desc": "默认已支持爱奇艺和阿里云，无需修改。添加其他网站参见仓库 README。"
+        }
+      ]
+    },
+    {
       "id": "llle0x.qinglong.iqiyi",
       "name": "爱奇艺 → 青龙",
       "desc": "单账号同步。凭证只在手机本地填写，不要上传配置备份。",
