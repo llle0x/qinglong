@@ -111,6 +111,12 @@
           "type": "text"
         }
       ]
+    },
+    {
+      "id": "llle0x.qinglong.ninebot",
+      "name": "九号出行 · 本地登录数据",
+      "desc": "读取 Surge 九号签到模块保存的账号 JSON，复制到青龙 NINEBOT_ACCOUNTS。凭证只在手机本地查看，不要公开分享或上传备份。此入口不自动同步。",
+      "keys": ["Ninebot.Accounts.SurgeV2", "Ninebot.Accounts"]
     }
   ]
 }

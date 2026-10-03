@@ -83,7 +83,7 @@ Surge 脚本控制台显示 `Result: {}` 仅表示脚本调用了结束接口，
 ### 订阅与依赖
 
 - 仓库链接：`https://github.com/llle0x/qinglong.git`；分支：`main`。
-- 白名单：`^(iQIYI|aliyun_web)\.js$`。
+- 白名单：`^(iQIYI|aliyun_web|ninebot)\.js$`。
 - 依赖文件：`lib/aliyun-runtime\.js$`。依赖文件要一起拉取，但不创建独立定时任务。
 - 青龙“依赖管理 → Node.js”添加 `cheerio@1.0.0`。Node.js 需 18.17 或更高。
 - 更新订阅后确认脚本目录里同时有 `aliyun_web.js` 和 `lib/aliyun-runtime.js`。
@@ -194,3 +194,28 @@ Surge 脚本控制台显示 `Result: {}` 仅表示脚本调用了结束接口，
 已核对的奖励名称对应点赞文章、收藏文章、分享文章、点赞回答。本周期出现正积分领取记录时跳过对应任务；没有记录时继续使用本地成功请求去重。`aliyunWeb_dedupe=false` 不会关闭官网检查，另设 `aliyunWeb_reward_check=false` 才关闭领取明细检查。
 
 **这是领取记录检查，不是完整任务进度接口。** 官网记录的时间是领取时间；延迟领取旧奖励可能使脚本跳过当前周期，未领取的新奖励也可能不在明细中。本地记录用于补充防重复，周周期仍以北京时间周一计算，尚未确认官方重置时刻。视频的奖励记录名称以及两项关注任务的累计奖励次数尚未核实，不用模糊名称或总积分推断它们已达标；本版没有新增自动关注。
+
+## 九号出行签到（青龙版）
+
+基于自己 [Surge 仓库的九号脚本](https://github.com/llle0x/Surge/blob/main/Scripts/ninebot.js) 适配，原流程来源于凉心（52Lxcloud/ScriptKit）。青龙运行根目录 `ninebot.js`，不要运行 Surge 原脚本。Node.js 18.17 或以上，无额外依赖，也不需要本仓库 lib 文件。
+
+1. 仓库订阅白名单改为 `^(iQIYI|aliyun_web|ninebot)\.js$`，重新拉取。
+2. 更新已有 BoxJS 订阅，在“九号出行 · 本地登录数据”的数据中复制 `Ninebot.Accounts.SurgeV2` 的完整 JSON 数组。若没有这个键，先在 Surge 启用九号抓取模块，再打开九号 App 签到页面获取数据。旧的 `Ninebot.Accounts` 是另一种格式，不能直接填入此版本。
+3. 青龙创建并启用环境变量 `NINEBOT_ACCOUNTS`，值为上述 JSON 数组。请保留捕获的 `tokenHeader`、`deviceHeader`，以及有时同时存在的 `authorization`，不要只复制 Token。示例（值需换成自己真实捕获的值）：
+
+```json
+[
+  {
+    "deviceId": "你的设备ID",
+    "token": "你的Token",
+    "tokenHeader": "access-token",
+    "deviceHeader": "device-id"
+  }
+]
+```
+
+4. 定时规则建议 `20 8 * * *`；命令为 `task llle0x_qinglong_main/ninebot.js`，以青龙脚本管理中的实际目录为准。手动运行一次确认结果。
+
+支持多账号，先查签到状态，已签到就跳过；提交后再查询状态确认成功；单个账号失败不会阻止其他账号。优先使用青龙系统通知设置（含 TG），旧版本回退 sendNotify。`NINEBOT_NOTIFY=off` 可关闭通知。请求限定九号固定 HTTPS 接口、不跟随跳转，每个请求超时 15 秒。日志只含账号序号和签到结果，不打印凭证或接口原始错误信息。
+
+没有使用真实 Token 验证当前接口及 N 币奖励。BoxJS 此入口仅展示手机本地数据，不会自动传给青龙；Token 更新后需重新复制。转由青龙签到后，可关闭 Surge 的 `Ninebot_Checkin` 定时项，保留 `Ninebot_Header` 捕获项。
