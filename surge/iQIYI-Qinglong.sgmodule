@@ -1,0 +1,11 @@
+#!name=爱奇艺 Cookie 自动同步青龙
+#!desc=Safari 登录爱奇艺捕获 Cookie，同步到自己的青龙。请先在 BoxJS 配置青龙地址及应用凭证。
+#!arguments=重试同步:15 * * * *
+#!arguments-desc=每小时15分重试同步本地 Cookie；打开登录页捕获成功后也会立即同步。
+
+[Script]
+爱奇艺Cookie同步 = type=http-request,pattern=^https:\/\/passport\.iqiyi\.com\/apis\/user\/,timeout=60,script-path=https://raw.githubusercontent.com/llle0x/qinglong/main/surge/iqiyi-sync.js
+爱奇艺定时同步 = type=cron,cronexp="{{{重试同步}}}",timeout=60,script-path=https://raw.githubusercontent.com/llle0x/qinglong/main/surge/iqiyi-sync.js
+
+[MITM]
+hostname = %APPEND% passport.iqiyi.com

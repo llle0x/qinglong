@@ -1,0 +1,95 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const { parseCookie, request } = require('../iQIYI.js');
+const cookie = 'P00001=test-token; P00003=12345; __dfp=device_123;';
+const source = fs.readFileSync(require.resolve('../surge/iqiyi-sync.js'), 'utf8');
+async function runSync({ rows = [], capture, credentials = true, status = 200, disabled = false } = {}) {
+  const store = new Map([['CookieQY', cookie]]);
+  if (credentials) {
+    store.set('qinglong_iqiyi_url', 'https://ql.example.com/');
+    store.set('qinglong_iqiyi_client_id', 'example-id');
+    store.set('qinglong_iqiyi_client_secret', 'example-secret');
+  }
+  const calls = [], notices = [];
+  let doneCount = 0;
+  await new Promise((resolve, reject) => {
+    const http = {};
+    for (const method of ['get', 'put', 'post']) http[method] = (opts, cb) => {
+      calls.push({ method, ...opts });
+      let data = {};
+      if (opts.url.includes('/auth/token')) data = { token: 'example-token' };
+      else if (method === 'get') data = rows;
+      cb(null, { status }, JSON.stringify({ code: 200, data }));
+    };
+    const context = {
+      $persistentStore: { read: key => store.get(key), write: (value, key) => { store.set(key, value); return true; } },
+      $httpClient: http,
+      $notification: { post: (...args) => notices.push(args) },
+      $done: () => { doneCount++; resolve(); }
+    };
+    if (capture) context.$request = capture;
+    try { vm.runInNewContext(source, context); } catch (err) { reject(err); }
+  });
+  assert.equal(doneCount, 1);
+  assert.ok(!JSON.stringify(notices).includes('example-secret'));
+  assert.ok(!JSON.stringify(notices).includes(cookie));
+  assert.ok(calls.every(c => c['auto-redirect'] === false));
+  return { calls, notices, store };
+}
+test('Cookie handles trailing/no trailing semicolon and missing fields', () => {
+  assert.equal(parseCookie(cookie).__dfp, 'device_123');
+  assert.equal(parseCookie(cookie.slice(0, -1)).P00003, '12345');
+  assert.throws(() => parseCookie('P00001=token;'), /缺少/);
+});
+test('Node transport rejects unapproved destinations without network', async () => {
+  for (const url of ['https://iqiyi.com.attacker.test', 'http://iqiyi.com']) {
+    await new Promise(resolve => request(url, (err, response) => {
+      assert.ok(err); assert.equal(response, null); resolve();
+    }));
+  }
+});
+test('new account creates an environment variable using array payload', async () => {
+  const { calls } = await runSync();
+  assert.equal(calls.length, 3);
+  assert.equal(calls[2].method, 'post');
+  assert.deepEqual(JSON.parse(calls[2].body), [{ name: 'IQIYI_COOKIE', value: cookie, remarks: 'Surge iQIYI' }]);
+});
+test('existing account updates by ID and preserves remarks', async () => {
+  const { calls } = await runSync({ rows: [{ id: 42, name: 'IQIYI_COOKIE', value: 'old', remarks: '我的账号' }] });
+  assert.equal(calls[2].method, 'put');
+  assert.equal(JSON.parse(calls[2].body).id, 42);
+  assert.equal(JSON.parse(calls[2].body).remarks, '我的账号');
+});
+test('unchanged Cookie skips upload and notifications', async () => {
+  const result = await runSync({ rows: [{ id: 42, name: 'IQIYI_COOKIE', value: cookie }] });
+  assert.equal(result.calls.length, 2);
+  assert.equal(result.notices.length, 0);
+});
+test('ambiguous duplicate variables cannot be overwritten', async () => {
+  const result = await runSync({ rows: [1, 2].map(id => ({ id, name: 'IQIYI_COOKIE', value: 'old' })) });
+  assert.equal(result.calls.length, 2);
+  assert.match(result.notices[0][2], /多个/);
+});
+test('duplicate variables select exactly one marked account', async () => {
+  const result = await runSync({ rows: [{ id: 1, name: 'IQIYI_COOKIE', value: 'old' }, { id: 2, name: 'IQIYI_COOKIE', value: 'old', remarks: 'Surge iQIYI' }] });
+  assert.equal(JSON.parse(result.calls[2].body).id, 2);
+});
+test('disabled environment variable remains untouched', async () => {
+  const result = await runSync({ rows: [{ id: 1, name: 'IQIYI_COOKIE', value: 'old', status: 1 }] });
+  assert.equal(result.calls.length, 2);
+  assert.match(result.notices[0][2], /禁用/);
+});
+test('captured Cookie is saved even before Qinglong configuration', async () => {
+  const updated = cookie.replace('test-token', 'new-token');
+  const result = await runSync({ credentials: false, capture: { url: 'https://passport.iqiyi.com/apis/user/info.action', headers: { cOoKiE: updated } } });
+  assert.equal(result.calls.length, 0);
+  assert.equal(result.store.get('CookieQY'), updated);
+});
+test('HTTP errors stop synchronization without secret disclosures', async () => {
+  const result = await runSync({ status: 401 });
+  assert.equal(result.calls.length, 1);
+  assert.match(result.notices[0][2], /401/);
+});

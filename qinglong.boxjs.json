@@ -1,0 +1,41 @@
+{
+  "id": "llle0x.qinglong",
+  "name": "青龙同步配置",
+  "description": "爱奇艺 Cookie 从 Surge 同步到自己的青龙",
+  "author": "llle0x",
+  "repo": "https://github.com/llle0x/qinglong",
+  "apps": [
+    {
+      "id": "llle0x.qinglong.iqiyi",
+      "name": "爱奇艺 → 青龙",
+      "desc": "单账号同步。凭证只在手机本地填写，不要上传配置备份。",
+      "keys": [
+        "qinglong_iqiyi_url",
+        "qinglong_iqiyi_client_id",
+        "qinglong_iqiyi_client_secret",
+        "CookieQY"
+      ],
+      "settings": [
+        {
+          "id": "qinglong_iqiyi_url",
+          "name": "青龙面板根地址",
+          "val": "",
+          "type": "text",
+          "desc": "例如 https://ql.example.com 或内网 http://192.168.1.100:5700；不要加 /open"
+        },
+        {
+          "id": "qinglong_iqiyi_client_id",
+          "name": "Client ID",
+          "val": "",
+          "type": "text"
+        },
+        {
+          "id": "qinglong_iqiyi_client_secret",
+          "name": "Client Secret",
+          "val": "",
+          "type": "text"
+        }
+      ]
+    }
+  ]
+}
