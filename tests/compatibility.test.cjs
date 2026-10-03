@@ -109,3 +109,13 @@ test('manual Surge run writes actionable diagnostic to console', async () => {
   const result = await runSync({ credentials: false });
   assert.ok(result.logs.some(line => line.includes('请在 BoxJS 填写')));
 });
+
+test('manual run with placeholder request synchronizes stored Cookie', async () => {
+  for (const capture of [{}, { url: '' }, { url: 'https://example.com', headers: { Cookie: 'unrelated=private' } }]) {
+    const result = await runSync({ capture });
+    assert.equal(result.calls.length, 3);
+    assert.equal(JSON.parse(result.calls[2].body)[0].value, cookie);
+    assert.equal(result.store.get('CookieQY'), cookie);
+    assert.ok(!JSON.stringify(result.logs).includes('unrelated=private'));
+  }
+});

@@ -43,10 +43,12 @@ function chooseEnv(rows) {
   throw new Error('存在多个 IQIYI_COOKIE；请将要更新的一条备注设为 Surge iQIYI');
 }
 async function sync() {
-  console.log('爱奇艺同步脚本 v2026.10.03.2');
+  console.log('爱奇艺同步脚本 v2026.10.03.3');
   let cookie = read(SOURCE_KEY);
-  if (typeof $request !== 'undefined') {
-    if (!/^https:\/\/passport\.iqiyi\.com\/apis\/user\//.test($request.url)) throw new Error('捕获地址不匹配');
+  // 编辑器等运行入口也可能提供 $request；仅目标请求才读取请求头。
+  const isCapture = typeof $request !== 'undefined' && $request &&
+    typeof $request.url === 'string' && /^https:\/\/passport\.iqiyi\.com\/apis\/user\//.test($request.url);
+  if (isCapture) {
     const headers = $request.headers || {};
     const key = Object.keys(headers).find(k => k.toLowerCase() === 'cookie');
     cookie = key ? headers[key] : '';
