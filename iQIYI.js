@@ -110,7 +110,7 @@ async function sendSummary(title, body, failed, cookies, loader = require) {
   }
 }
 async function main({ runner = runAccount, notifier = sendSummary } = {}) {
-  console.log('爱奇艺青龙脚本 v2026.10.03.5');
+  console.log('爱奇艺青龙脚本 v2026.10.03.6');
   const cookies = parseAccounts(process.env.IQIYI_COOKIE);
   const summaries = [];
   let failed = false;
@@ -163,6 +163,15 @@ async function runAccount(cookie) {
   }
   const text = [`会员到期：${$nobyda.expire || '查询未成功'}`, ...pushMsg].join('\n');
   return { text, failed: /❌|⚠️|失败|无效|出错/.test(text) };
+}
+function apiStatus(obj, cookie = `P00001=${P00001 || ''};P00003=${P00003 || ''};__dfp=${DFP || ''};`) {
+  const fields = [
+    ['code', obj?.code], ['子code', obj?.data?.code],
+    ['msg', obj?.msg || obj?.message], ['子msg', obj?.data?.msg || obj?.data?.message]
+  ];
+  const summary = fields.filter(([, value]) => typeof value === 'string' || typeof value === 'number')
+    .map(([key, value]) => `${key}=${String(value).replace(/https?:\/\/\S+/g, '[链接]').slice(0, 160)}`).join('，');
+  return redact(summary || '未提供状态码或错误消息', [cookie]);
 }
 function report(message) { pushMsg.push(message); console.log(message); }
 function jsonGet(url) {
@@ -292,13 +301,13 @@ function Checkin() {
             var continued = obj.data.data.signDays;
             CheckinMsg = `应用签到: ${rewards.length ? `${rewards.join(", ")}${rewards.length < 3 ? `, 累计签到${continued}天` : ``}` : '无奖励'} 🎉`;
           } else {
-            CheckinMsg = `应用签到: ${obj.data.msg} ⚠️`;
+            CheckinMsg = `应用签到失败: ${apiStatus(obj)} ⚠️`;
           }
         } else {
-          CheckinMsg = `应用签到: Cookie无效 ⚠️`;
+          CheckinMsg = `应用签到失败: ${apiStatus(obj)} ⚠️`;
         }
       } catch (e) {
-        CheckinMsg = `应用签到: ${e.message || e}`;
+        CheckinMsg = '应用签到失败：请求或响应数据异常';
       }
       pushMsg.push(CheckinMsg);
       console.log(`爱奇艺-${CheckinMsg} ${Details}`);
@@ -348,22 +357,24 @@ function getTaskList(task) {
         const obj = JSON.parse(data);
         if (obj.code == 'A00000' && obj.data && obj.data.tasks) {
           Object.keys(obj.data.tasks).map((group) => {
-            (obj.data.tasks[group] || []).map((item) => {
+            const items = obj.data.tasks[group];
+            if (!Array.isArray(items)) return;
+            items.map((item) => {
               taskList.push({
-                name: item.taskTitle,
-                taskCode: item.taskCode,
+                name: item.taskTitle || item.name,
+                taskCode: item.taskCode || item.code,
                 status: item.status
               })
             })
           })
           taskListMsg = `获取成功!`;
         } else {
-          taskListMsg = `获取失败!`;
+          taskListMsg = `获取失败：${apiStatus(obj)}；未取得任务列表`;
         }
       } catch (e) {
-        taskListMsg = `${e.message || e} ‼️`;
+        taskListMsg = '获取失败：请求或响应数据异常';
       }
-      console.log(`爱奇艺-任务列表: ${taskListMsg} ${Details}`)
+      report(`爱奇艺-任务列表: ${taskListMsg}`);
       resolve(taskList)
     })
   })
@@ -452,7 +463,7 @@ function w() {
     t.join("&")
 }
 
-module.exports = { parseCookie, parseAccounts, redact, sendSummary, request, main, encodeQuery: w };
+module.exports = { parseCookie, parseAccounts, redact, sendSummary, request, main, apiStatus, encodeQuery: w };
 if (require.main === module) main().catch(error => {
   console.error('任务执行或通知汇总异常，请查看上方日志。');
   process.exitCode = 1;

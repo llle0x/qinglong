@@ -253,3 +253,13 @@ test('mocked full run isolates accounts and signs encoded web/API requests', asy
   assert.equal(pushes.length, 1);
   assert.equal(pushes[0][2], false);
 });
+
+test('API diagnostics distinguish service errors without exposing credentials or URLs', () => {
+  const { apiStatus } = require('../iQIYI.js');
+  const summary = apiStatus({ code: 'A00000', data: { code: 'E_SYSTEM', msg: '系统异常 test-token https://example.com/?secret=test-token' } }, cookie);
+  assert.match(summary, /E_SYSTEM/);
+  assert.match(summary, /系统异常/);
+  assert.ok(!summary.includes('test-token'));
+  assert.ok(!summary.includes('https://'));
+  assert.match(apiStatus({}), /未提供/);
+});
