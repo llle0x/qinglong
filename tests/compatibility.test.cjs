@@ -13,7 +13,7 @@ async function runSync({ rows = [], capture, credentials = true, status = 200, d
     store.set('qinglong_iqiyi_client_id', 'example-id');
     store.set('qinglong_iqiyi_client_secret', 'example-secret');
   }
-  const calls = [], notices = [];
+  const calls = [], notices = [], logs = [];
   let doneCount = 0;
   await new Promise((resolve, reject) => {
     const http = {};
@@ -25,6 +25,7 @@ async function runSync({ rows = [], capture, credentials = true, status = 200, d
       cb(null, { status }, JSON.stringify({ code: 200, data }));
     };
     const context = {
+      console: { log: message => logs.push(message) },
       $persistentStore: { read: key => store.get(key), write: (value, key) => { store.set(key, value); return true; } },
       $httpClient: http,
       $notification: { post: (...args) => notices.push(args) },
@@ -36,8 +37,10 @@ async function runSync({ rows = [], capture, credentials = true, status = 200, d
   assert.equal(doneCount, 1);
   assert.ok(!JSON.stringify(notices).includes('example-secret'));
   assert.ok(!JSON.stringify(notices).includes(cookie));
+  assert.ok(!JSON.stringify(logs).includes('example-secret'));
+  assert.ok(!JSON.stringify(logs).includes(cookie));
   assert.ok(calls.every(c => c['auto-redirect'] === false));
-  return { calls, notices, store };
+  return { calls, notices, store, logs };
 }
 test('Cookie handles trailing/no trailing semicolon and missing fields', () => {
   assert.equal(parseCookie(cookie).__dfp, 'device_123');
@@ -92,4 +95,17 @@ test('HTTP errors stop synchronization without secret disclosures', async () => 
   const result = await runSync({ status: 401 });
   assert.equal(result.calls.length, 1);
   assert.match(result.notices[0][2], /401/);
+});
+
+test('empty Qinglong environment reports a specific reason without credentials', () => {
+  const { spawnSync } = require('node:child_process');
+  const result = spawnSync(process.execPath, [require.resolve('../iQIYI.js')], {
+    env: { ...process.env, IQIYI_COOKIE: '' }, encoding: 'utf8'
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /未读取到 IQIYI_COOKIE/);
+});
+test('manual Surge run writes actionable diagnostic to console', async () => {
+  const result = await runSync({ credentials: false });
+  assert.ok(result.logs.some(line => line.includes('请在 BoxJS 填写')));
 });

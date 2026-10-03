@@ -1,4 +1,6 @@
 /*
+new Env("爱奇艺会员签到")
+name: 爱奇艺会员签到
 爱奇艺会员签到 — 青龙 / Node.js 适配版
 原作者：NobyDa；上游：https://github.com/NobyDa/Script/blob/master/iQIYI-DailyBonus/iQIYI.js
 修改日期：2026-10-03。改用内置网络和 MD5，严格校验 Cookie，禁止凭证日志。
@@ -13,13 +15,20 @@ const LogDetails = false;
 let P00001, P00003, DFP;
 const pushMsg = [];
 function md5(value) { return crypto.createHash('md5').update(value).digest('hex'); }
+function inputError(message) {
+  const error = new Error(message);
+  error.safeMessage = message;
+  return error;
+}
 function parseCookie(value) {
+  if (!String(value || '').trim()) throw inputError('未读取到 IQIYI_COOKIE，请确认青龙环境变量已创建并启用，且名称完全一致');
   const fields = Object.fromEntries(String(value || '').split(';').map(s => s.trim()).filter(Boolean).map(s => {
     const i = s.indexOf('=');
     return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)];
   }));
-  if (['P00001', 'P00003', '__dfp'].some(k => !fields[k])) throw new Error('IQIYI_COOKIE 缺少 P00001、P00003 或 __dfp，请重新获取');
-  if (!/^[A-Za-z0-9_-]+$/.test(fields.P00001) || !/^\d+$/.test(fields.P00003) || !/^\w+$/.test(fields.__dfp)) throw new Error('Cookie 关键字段格式不正确');
+  const missing = ['P00001', 'P00003', '__dfp'].filter(k => !fields[k]);
+  if (missing.length) throw inputError(`IQIYI_COOKIE 缺少字段：${missing.join('、')}；请重新获取完整 Cookie`);
+  if (!/^[A-Za-z0-9_-]+$/.test(fields.P00001) || !/^\d+$/.test(fields.P00003) || !/^\w+$/.test(fields.__dfp)) throw inputError('Cookie 关键字段格式不正确；请确认填写的是完整 Cookie 字符串，而非 JSON 或单独的 Token');
   return fields;
 }
 function request(options, callback, method = 'GET') {
@@ -57,7 +66,9 @@ const $nobyda = {
   post: (opts, cb) => request(opts, cb, 'POST')
 };
 async function main() {
+  console.log('爱奇艺青龙脚本 v2026.10.03.2');
   const fields = parseCookie(process.env.IQIYI_COOKIE);
+  console.log('Cookie 三个必需字段校验通过，开始请求爱奇艺接口。');
   P00001 = fields.P00001;
   P00003 = fields.P00003;
   DFP = fields.__dfp;
@@ -327,7 +338,7 @@ function w() {
 }
 
 module.exports = { parseCookie, request, main };
-if (require.main === module) main().catch(() => {
-  console.error('任务失败：请检查 IQIYI_COOKIE、网络和接口状态。');
+if (require.main === module) main().catch(error => {
+  console.error(`任务失败：${error.safeMessage || '执行异常；请根据上方接口日志检查网络及接口状态'}`);
   process.exitCode = 1;
 });
