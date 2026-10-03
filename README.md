@@ -75,3 +75,41 @@ Surge 脚本控制台显示 `Result: {}` 仅表示脚本调用了结束接口，
 若提示缺少 `QLAPI.systemNotify`，旧环境回退到 `sendNotify.js`，它读取的是 `TG_BOT_TOKEN`、`TG_USER_ID` 等环境变量，不能保证读取面板系统通知设置。两种配置来源不同。无需把 Bot Token 发到聊天或仓库。
 
 通知接口返回成功仅表示接口调用返回成功，实际送达仍需在 Telegram 确认。接口异常不会自动重复调用另一条通知路径，以免重复发送。
+
+## 阿里云社区（aliyun_web.js）
+
+基于 [Leiyiyan 原脚本](https://github.com/leiyiyan/resource/blob/main/script/aliyun_web/aliyun_web.js) 的青龙适配，保留签到、积分收取、点赞、收藏、分享、评论等任务逻辑。原作者说明见 `UPSTREAM-ALIYUN.md`。目录中的 `aliyun_web_process.js` 是另一日常版本，`aliyun_web_scene.js` 是独立场景任务，未重复加入以避免重复执行。
+
+### 订阅与依赖
+
+- 仓库链接：`https://github.com/llle0x/qinglong.git`；分支：`main`。
+- 白名单：`^(iQIYI|aliyun_web)\.js$`。
+- 依赖文件：`lib/aliyun-runtime\.js$`。依赖文件要一起拉取，但不创建独立定时任务。
+- 青龙“依赖管理 → Node.js”添加 `cheerio@1.0.0`。Node.js 需 18.17 或更高。
+- 更新订阅后确认脚本目录里同时有 `aliyun_web.js` 和 `lib/aliyun-runtime.js`。
+- 命令：`task llle0x_qinglong/aliyun_web.js`（按实际订阅目录调整）。
+- 定时规则：`0 7,13 * * *`，每天 07:00 / 13:00；脚本默认北京时间。
+
+### 环境变量
+
+| 变量 | 用途 | 默认值 |
+|---|---|---|
+| `aliyunWeb_data` | 完整 Cookie，或原 BoxJS 保存的账号 JSON 数组 | 必填 |
+| `aliyunWeb_time` | 上午任务与积分收取的分界小时，1–23 | `12` |
+| `aliyunWeb_scene` | 场景任务开关 | `false` |
+| `aliyunWeb_video` | 视频任务开关 | `false` |
+| `aliyunWeb_stock` | 库存查询开关 | `false` |
+| `aliyunWeb_notify` | `off` 关闭通知；其他值使用系统通知 | 开启 |
+| `aliyunWeb_timezone` | 运行时区 | `Asia/Shanghai` |
+
+原作者获取方式：阿里云 App → 首页 → 积分商城。原 BoxJS 的 `aliyunWeb_data` 数据可直接使用，例如账号对象带 `token`、`userId`、`userName`、`avatar`。支持单个对象、对象数组，或纯 Cookie 每行一个账号；不使用 `@` 分隔，避免误拆 Cookie 内的字符。
+
+原作者配套的 [aliyun_web_ck.js](https://github.com/leiyiyan/resource/blob/main/script/aliyun_web/aliyun_web_ck.js) 可以同步该环境变量；它还有自动运行任务功能，因此需要“环境变量”和“定时任务”权限，并匹配任务名“阿里云社区”。本次未改动该手机同步脚本。不要同时定时执行多个阿里云日常版本。
+
+分界时间前执行签到与互动，分界时间后领取积分及取消部分点赞、收藏。评论会提交到社区，场景和视频默认关闭。接口可能变化，真实任务及奖励尚未验证。
+
+### 通知和运行调整
+
+适配版优先调用青龙 `QLAPI.systemNotify` 使用系统设置中的 TG 配置；旧环境回退到 `sendNotify.js`。Cheerio 改为本地依赖，不再从外部代理下载并执行 JS。取消原版结束时固定 `process.exit(1)` 的行为，运行错误或账号状态异常才标记失败。日志调试强制关闭，不输出原始接口响应。
+
+本地验证：`npm install` 后运行 `npm test`。测试使用模拟接口，未登录真实阿里云账号或发布评论。
