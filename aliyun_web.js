@@ -2,9 +2,9 @@
 new Env('阿里云社区')
 cron: 0 7,13 * * *
 原作者：Leiyiyan。来源：https://github.com/leiyiyan/resource/blob/main/script/aliyun_web/aliyun_web.js
-青龙适配修改：llle0x，2026-10-03。保留原任务流程，解码字符串以便检查。
+青龙适配修改：llle0x，2026-10-04。按现行任务列表更新执行流程。
 依赖：cheerio@1.0.0；Node.js >= 18.17。变量：aliyunWeb_data。
-任务包含点赞、收藏、评论、分享，以及可选场景、视频和库存查询。
+任务包含签到、现行文章/回答互动、可选视频、积分领取及库存查询。
 原脚本使用说明及声明见 UPSTREAM-ALIYUN.md；本适配不改变原作者声明。
 */
 "use strict";
@@ -37,27 +37,6 @@ var userCookie =
 let userList = [],
   userIdx = 0x0,
   userCount = 0x0;
-const taskGroup = [
-  { code: "", name: "我的社区" },
-  { code: "ecs", name: "弹性计算" },
-  { code: "computenest", name: "计算巢" },
-  { code: "yitian", name: "倚天" },
-  { code: "wuying", name: "无影" },
-  { code: "cloudnative", name: "云原生" },
-  { code: "storage", name: "云存储" },
-  { code: "luoshen", name: "飞天洛神云网络" },
-  { code: "database", name: "数据库" },
-  { code: "polardb", name: "PolarDB开源" },
-  { code: "bigdata", name: "大数据与机器学习" },
-  { code: "modelscope", name: "ModelScope模型即服务" },
-  { code: "viapi", name: "视觉智能" },
-  { code: "dns", name: "域名解析DNS" },
-  { code: "iot", name: "物联网" },
-  { code: "devops", name: "云效DevOps" },
-  { code: "aliyun_linux", name: "龙蜥操作系统" },
-  { code: "modelstudio", name: "百炼大模型" },
-  { code: "tongyi", name: "通义大模型" },
-];
 (($["is_debug"] = "false"), ($["notifyList"] = []), ($["notifyMsg"] = []));
 let pendingScore = 0x0,
   userScore = 0x0,
@@ -66,202 +45,152 @@ let pendingScore = 0x0,
   sectionId = "",
   ip = "";
 async function main() {
-  const _0x386317 = null,
-    _0x14727e = {
-      xuiao: "\n================== 任务 ==================\n",
-      NywEO: function (_0x1c4f8e, _0xc27505) {
-        return _0x1c4f8e < _0xc27505;
-      },
-      TTxTK: "ebook",
-      FWaSG: "aliyun-public-favorite",
-      jGpQE: function (_0x51fe2e, _0x3c7dcf) {
-        return _0x51fe2e === _0x3c7dcf;
-      },
-      ZTdtz: "aliyun-public-share",
-      svNIw: "ask",
-      bSdCA: function (_0x33688e, _0x918b75) {
-        return _0x33688e(_0x918b75);
-      },
-      mJvCL: "aliyun-public-like",
-      hRfil: function (_0x18d20c, _0x223927) {
-        return _0x18d20c || _0x223927;
-      },
-      xOqdl: function (_0x1100e8, _0x74e128) {
-        return _0x1100e8(_0x74e128);
-      },
+  const state = runtime.createTaskState();
+  for (const account of userList) {
+    console.log(`🔷账号${account.index} >> Start work`);
+    const summary = [];
+    const report = (message) => {
+      $.log(message);
+      summary.push(message);
     };
-  try {
-    $["log"](_0x14727e["xuiao"]);
-    for (let _0xc17500 of userList) {
-      (console["log"]("🔷账号" + _0xc17500["index"] + " >> Start work"),
-        console["log"]("随机延迟" + _0xc17500["getRandomTime"]() + "秒"));
-      const _0x1c4f51 = Date["now"]();
-      userScore = (await _0xc17500["interactData"]()) ?? {};
-      if (_0xc17500["ckStatus"]) {
-        if (
-          _0x14727e["NywEO"](
-            _0x1c4f51,
-            new Date(
-              new Date()["setHours"](Math["floor"](controlTime), 0x0, 0x0, 0x0),
-            )["getTime"](),
-          )
-        ) {
-          for (let _0x57933f of taskGroup) {
-            const _0x51d904 = await _0xc17500["getUserSpaceSignInDetail"](
-                _0x57933f["code"],
-              ),
-              _0x33a038 = await _0xc17500["getTasks"](_0x51d904);
-            (await _0xc17500["signin"](_0x33a038, _0x57933f["name"]),
-              await $["wait"](_0xc17500["getRandomTime"]()));
-            const _0x17a4ce = await _0xc17500["assessSignInBonusQualification"](
-              _0x51d904,
-              _0x57933f["name"],
-            );
-            (await $["wait"](_0xc17500["getRandomTime"]()),
-              _0x17a4ce &&
-                (await _0xc17500["receiveSignInBonus"](
-                  _0x51d904,
-                  _0x57933f["name"],
-                ),
-                await $["wait"](_0xc17500["getRandomTime"]())));
-          }
-          const _0x50061a = await _0xc17500["getEbooks"]();
-          await $["wait"](_0xc17500["getRandomTime"]());
-          const _0x18bdd1 = await _0xc17500["getCsrfToken"](
-            _0x50061a,
-            _0x14727e["TTxTK"],
+    try {
+      const score = await account.interactData();
+      if (!account.ckStatus || score === undefined) {
+        report("⛔️ 账号积分查询失败，跳过账号任务");
+        continue;
+      }
+      const morning = new Date().getHours() < Number(controlTime);
+      const group = await account.getUserSpaceSignInDetail("");
+      if (group) {
+        if (morning) {
+          const task = await account.getTasks(group);
+          const success = await account.signin(task);
+          report(
+            task
+              ? `${success ? "✅" : "⛔️"} 我的社区签到：${success ? "接口接受请求" : "未完成"}`
+              : "⏭️ 我的社区当前没有可执行签到任务",
           );
-          (await $["wait"](_0xc17500["getRandomTime"]()),
-            await _0xc17500["addBookComment"](_0x50061a, _0x18bdd1),
-            await $["wait"](_0xc17500["getRandomTime"]()));
-          for (
-            let _0xc370fb = 0x0;
-            _0x14727e["NywEO"](_0xc370fb, 0x5);
-            _0xc370fb++
-          ) {
-            const _0x4f28c6 = await _0xc17500["getArticles"]();
-            (await $["wait"](_0xc17500["getRandomTime"]()),
-              await _0xc17500["likeOrNotLike"](
-                _0x4f28c6,
-                "aliyun-public-like",
-                0x0,
-              ),
-              await $["wait"](_0xc17500["getRandomTime"]()),
-              await _0xc17500["likeOrNotLike"](
-                _0x4f28c6,
-                _0x14727e["FWaSG"],
-                0x0,
-              ),
-              await $["wait"](_0xc17500["getRandomTime"]()));
-            _0x14727e["jGpQE"](_0xc370fb, 0x0) &&
-              (await _0xc17500["addComment"](_0x4f28c6),
-              await $["wait"](_0xc17500["getRandomTime"]()),
-              await _0xc17500["likeOrNotLike"](
-                _0x4f28c6,
-                _0x14727e["ZTdtz"],
-                0x0,
-              ),
-              await $["wait"](_0xc17500["getRandomTime"]()));
-            const _0x55e5ff = await _0xc17500["getAsks"]();
-            await $["wait"](_0xc17500["getRandomTime"]());
-            if (_0x55e5ff && _0x55e5ff?.["id"]) {
-              const _0x4779c0 = await _0xc17500["getCsrfToken"](
-                _0x55e5ff["id"],
-                _0x14727e["svNIw"],
-              );
-              await $["wait"](_0xc17500["getRandomTime"]());
-              const _0x3dea62 = await _0xc17500["getAskDetail"](_0x55e5ff);
-              (await $["wait"](_0xc17500["getRandomTime"]()),
-                _0x3dea62 &&
-                  (await _0xc17500["voteAnswer"](
-                    _0x55e5ff["id"],
-                    _0x3dea62,
-                    _0x4779c0,
-                    0x1,
-                  ),
-                  await $["wait"](_0xc17500["getRandomTime"]())));
-            }
-          }
-          (JSON["parse"](controlScene) &&
-            (await _0xc17500["doScene"](),
-            await $["wait"](_0xc17500["getRandomTime"]())),
-            JSON["parse"](controlVideo) &&
-              (await _0xc17500["playVideo"](),
-              await $["wait"](_0xc17500["getRandomTime"]())),
-            JSON["parse"](controlStock) && (await _0xc17500["getGroupItems"]()),
-            (pendingScore = await _0xc17500["getUserTotalPendingScore"]()),
-            ($["title"] = "获得待领取积分: " + pendingScore),
-            _0x14727e["bSdCA"](
-              DoubleLog,
-              "🎉 当前积分: " + userScore + ", 待领取积分: " + pendingScore,
-            ));
-        } else {
-          for (let _0x4d3f34 of taskGroup) {
-            const _0x5459c9 = await _0xc17500["getUserSpaceSignInDetail"](
-                _0x4d3f34["code"],
-              ),
-              _0x842398 = await _0xc17500["assessSignInBonusQualification"](
-                _0x5459c9,
-                _0x4d3f34["name"],
-              );
-            (await $["wait"](_0xc17500["getRandomTime"]()),
-              _0x842398 &&
-                (await _0xc17500["receiveSignInBonus"](
-                  _0x5459c9,
-                  _0x4d3f34["name"],
-                ),
-                await $["wait"](_0xc17500["getRandomTime"]())));
-          }
-          ((pendingScore = await _0xc17500["getUserTotalPendingScore"]()),
-            await $["wait"](_0xc17500["getRandomTime"]()),
-            await _0xc17500["collect"](),
-            await $["wait"](_0xc17500["getRandomTime"]()),
-            await $["wait"](_0xc17500["getRandomTime"]()));
-          const _0x1f9cba = (await _0xc17500["getFavors"]()) ?? [];
-          await $["wait"](_0xc17500["getRandomTime"]());
-          if (_0x1f9cba["length"])
-            for (let _0x375857 of _0x1f9cba) {
-              (await _0xc17500["likeOrNotLike"](
-                _0x375857["objectId"],
-                _0x14727e["mJvCL"],
-                0x1,
-              ),
-                await $["wait"](_0xc17500["getRandomTime"]()),
-                await _0xc17500["likeOrNotLike"](
-                  _0x375857["objectId"],
-                  _0x14727e["FWaSG"],
-                  0x1,
-                ),
-                await $["wait"](_0xc17500["getRandomTime"]()));
-            }
-          JSON["parse"](controlStock) && (await _0xc17500["getGroupItems"]());
-          let _0x2764b0 = (await _0xc17500["interactData"]()) ?? {};
-          (($["title"] =
-            "本次运行共获得" + _0x14727e["hRfil"](pendingScore, 0x0) + "积分"),
-            _0x14727e["xOqdl"](
-              DoubleLog,
-              "🎉\x20领取积分:\x20" +
-                pendingScore +
-                ",\x20当前积分:\x20" +
-                _0x2764b0,
-            ));
         }
-      } else
-        $["notifyMsg"]["push"](
-          "⛔️\x20账号" +
-            (_0xc17500["userName"] || _0xc17500["index"]) +
-            "\x20>>\x20Check\x20ck\x20error!",
+        // 查询是否可领取，实际领取由已有接口判断。
+        if (await account.assessSignInBonusQualification(group))
+          await account.receiveSignInBonus(group, "我的社区");
+      } else report("⏭️ 我的社区当前没有可用签到任务组");
+      if (morning) {
+        let catalog = [];
+        try {
+          catalog = runtime.parseTaskCatalog(
+            await account.fetch({
+              url: "https://developer.aliyun.com/mission/daily",
+              type: "get",
+            }),
+            $.Cheerio,
+          );
+          report(
+            `已读取官网现行任务 ${catalog.length} 项；仅执行已支持的任务。`,
+          );
+        } catch (error) {
+          account.ckStatus = false;
+          report(`⛔️ ${error.message}`);
+        }
+        const eligible = (title) => {
+          const task = catalog.find((item) => item.title === title);
+          if (!task) return null;
+          if (
+            process.env.aliyunWeb_dedupe !== "false" &&
+            state.has(account, task)
+          ) {
+            report(`⏭️ ${title}：本周期已有成功请求，跳过`);
+            return null;
+          }
+          return task;
+        };
+        const record = (task, success) => {
+          report(
+            `${success ? "✅" : "⛔️"} ${task.title}：${success ? "接口接受请求，奖励以积分记录为准" : "未完成，保留后续重试"}`,
+          );
+          if (success) {
+            try {
+              state.mark(account, task);
+            } catch (_) {
+              report("⚠️ 任务去重记录保存失败，请检查 config 目录写权限");
+            }
+          } else account.ckStatus = false;
+        };
+        const articleTasks = [
+          ["点赞任一文章", "aliyun-public-like"],
+          ["收藏任一文章", "aliyun-public-favorite"],
+          ["分享任一文章", "aliyun-public-share"],
+        ]
+          .map(([title, action]) => ({ task: eligible(title), action }))
+          .filter((item) => item.task);
+        if (articleTasks.length) {
+          const article = await account.getArticles();
+          for (const item of articleTasks) {
+            record(
+              item.task,
+              Boolean(
+                article &&
+                  (await account.likeOrNotLike(article, item.action, 0)),
+              ),
+            );
+            await $.wait(account.getRandomTime());
+          }
+        }
+        const askTask = eligible("点赞任一回答");
+        if (askTask) {
+          const ask = await account.getAsks();
+          const answer = ask && (await account.getAskDetail(ask));
+          const csrf = answer && (await account.getCsrfToken(ask.id, "ask"));
+          record(
+            askTask,
+            Boolean(
+              csrf && (await account.voteAnswer(ask.id, answer, csrf, 1)),
+            ),
+          );
+        }
+        const videoTask = eligible("观看视频");
+        if (videoTask && controlVideo === "true")
+          record(videoTask, await account.playVideo());
+        else if (videoTask) report("⏭️ 观看视频：aliyunWeb_video 未开启");
+        if (controlScene === "true")
+          report("⏭️ 原场景实验已不在现行积分任务列表；部署解决方案需手动完成");
+        const manual = catalog.filter(
+          (item) =>
+            ![
+              "点赞任一文章",
+              "收藏任一文章",
+              "分享任一文章",
+              "点赞任一回答",
+              "观看视频",
+            ].includes(item.title),
         );
-      ($["notifyList"]["push"]({
-        id: _0xc17500["index"],
-        avatar: _0xc17500["avatar"],
-        message: $["notifyMsg"],
-      }),
-        ($["notifyMsg"] = []));
+        if (manual.length)
+          report(`需手动完成：${manual.map((item) => item.title).join("、")}`);
+        report(
+          "已移除旧电子书评价、文章评论及每日五轮互动；不自动取消点赞或收藏。",
+        );
+      } else {
+        const pending = await account.getUserTotalPendingScore();
+        const collected = await account.collect();
+        report(
+          `🎉 领取积分：${collected === undefined ? "请求失败" : collected}；领取前待领取：${pending === undefined ? "查询失败" : pending}`,
+        );
+      }
+      if (controlStock === "true") await account.getGroupItems();
+      const pending = await account.getUserTotalPendingScore();
+      report(
+        `当前积分：${await account.interactData()}；待领取积分：${pending === undefined ? "查询失败" : pending}`,
+      );
+    } catch (error) {
+      account.ckStatus = false;
+      report(`⛔️ 账号任务异常：${runtime.redact(error.message)}`);
+    } finally {
+      $.notifyList.push({
+        id: account.index,
+        message: [...summary, ...$.notifyMsg],
+      });
+      $.notifyMsg = [];
     }
-  } catch (_0x1fd506) {
-    $["log"]("⛔️ main run error => " + _0x1fd506);
-    throw new Error("⛔️ main run error => " + _0x1fd506);
   }
 }
 class UserInfo {
@@ -412,141 +341,91 @@ class UserInfo {
         $["log"]("⛔️ 获取签到任务列表失败! " + _0x1d6ab4));
     }
   }
-  async ["getTasks"](_0x4716cf) {
-    const _0x263cb5 = null,
-      _0x469eff = {
-        uxbgL: "get",
-        LWPjm: function (_0x48f3d1, _0x3247de) {
-          return _0x48f3d1 >= _0x3247de;
-        },
-        fgwjk: function (_0x3e5654, _0x488e02) {
-          return _0x3e5654 <= _0x488e02;
-        },
-      };
-    if (!_0x4716cf) return null;
-    try {
-      const _0x5ad647 = {
-        url: "/task/getTaskGroup?groupId=" + _0x4716cf,
-        type: _0x469eff["uxbgL"],
-      };
-      let _0x2191eb = await this["fetch"](_0x5ad647);
-      const _0x58d890 = _0x2191eb?.["data"]?.["taskList"];
-      let _0x477196 = {};
-      if (_0x58d890["length"]) {
-        const _0x21834a = new Date()["getTime"]();
-        for (let _0x5889ef of _0x58d890) {
-          if (
-            _0x469eff["LWPjm"](_0x21834a, _0x5889ef["gmtEnableStart"]) &&
-            _0x469eff["fgwjk"](_0x21834a, _0x5889ef["gmtEnableEnd"])
-          ) {
-            const _0x348e5d = JSON["parse"](
-              _0x5889ef["finishRule"]["replace"](/&quot;/g, "\x22"),
-            );
-            ((_0x477196["actionCode"] =
-              _0x348e5d["actions"][0x0]["actionCode"]),
-              (_0x477196["activityCode"] =
-                _0x348e5d["actions"][0x0]["actionCode"]),
-              (_0x477196["objectId"] = _0x348e5d["actions"][0x0]["objectId"]));
-          }
-        }
+  async ["getTasks"](groupId) {
+    if (!groupId) return null;
+    const response = await this.fetch({
+      url: "/task/getTaskGroup",
+      type: "get",
+      params: { groupId },
+    });
+    const tasks = response?.data?.taskList;
+    if (!Array.isArray(tasks)) {
+      this.ckStatus = false;
+      $.log("⛔️ 获取签到任务列表失败：未取得有效任务列表");
+      return null;
+    }
+    const now = Date.now();
+    for (const task of tasks) {
+      if (
+        !task ||
+        (task.gmtEnableStart != null && now < Number(task.gmtEnableStart)) ||
+        (task.gmtEnableEnd != null && now > Number(task.gmtEnableEnd))
+      )
+        continue;
+      let rule;
+      try {
+        rule =
+          typeof task.finishRule === "string"
+            ? JSON.parse(task.finishRule.replace(/&quot;/g, '"'))
+            : task.finishRule;
+      } catch (_) {
+        continue;
       }
-      return _0x477196;
-    } catch (_0x570364) {
-      ((this["ckStatus"] = ![]),
-        $["log"]("⛔️ 获取签到任务列表失败! " + _0x570364));
-    }
-  }
-  async ["signin"](_0x21e749, _0x2d26f7) {
-    const _0x5d0751 = null,
-      _0x43ef6f = { DukOp: "default", MMtHY: "post", LRljz: "form" };
-    if (!_0x21e749) {
-      $["log"](
-        "✅\x20签到\x20-\x20" +
-          (_0x2d26f7 || _0x43ef6f["DukOp"]) +
-          ": 该社区无签到任务",
-      );
-      return;
-    }
-    try {
-      const _0x26ea71 = {
-        url: "/task/actionLog",
-        type: _0x43ef6f["MMtHY"],
-        dataType: _0x43ef6f["LRljz"],
-        body: _0x21e749,
+      const action = rule?.actions?.[0];
+      if (!action?.actionCode || action.objectId == null) continue;
+      return {
+        actionCode: action.actionCode,
+        activityCode: action.activityCode || action.actionCode,
+        objectId: action.objectId,
       };
-      let _0x4dddd7 = await this["fetch"](_0x26ea71);
-      $["log"](
-        "✅ 签到 - " +
-          (_0x2d26f7 || _0x43ef6f["DukOp"]) +
-          ":\x20" +
-          _0x4dddd7?.["message"],
-      );
-    } catch (_0x3f0eb8) {
-      ((this["ckStatus"] = ![]), $["log"]("⛔️ 签到失败! " + _0x3f0eb8));
     }
+    return null;
+  }
+  async ["signin"](task, name = "我的社区") {
+    if (!task) {
+      $.log(`⏭️ 签到 - ${name}: 当前没有可执行签到任务`);
+      return false;
+    }
+    const response = await this.fetch({
+      url: "/task/actionLog",
+      type: "post",
+      dataType: "form",
+      body: task,
+    });
+    const success = String(response?.code) === "200";
+    if (!success) this.ckStatus = false;
+    $.log(
+      `${success ? "✅" : "⛔️"} 签到 - ${name}: ${response ? response.message || (success ? "完成" : "接口未返回成功") : "请求失败"}`,
+    );
+    return success;
   }
   async ["getArticles"]() {
-    const _0x222440 = null,
-      _0x516d78 = {
-        SFRut: function (_0x57cae3, _0x4b7c58) {
-          return _0x57cae3(_0x4b7c58);
-        },
-        QZOAr: "data-id",
-        uPDAJ: function (_0x228e0e, _0xc3a8e5) {
-          return _0x228e0e(_0xc3a8e5);
-        },
-        IzCOg: ".feed-item-content-title h3",
-        tUyHv: function (_0x21d975, _0x2e5ffb) {
-          return _0x21d975 + _0x2e5ffb;
-        },
-        XbFSl: "get",
-        ZlwUl: ".community-detail-content",
-        ItYwU: function (_0x42b248, _0x1146e1) {
-          return _0x42b248 * _0x1146e1;
-        },
-      };
-    try {
-      const _0x177237 = _0x516d78["tUyHv"](
-          Math["floor"](Math["random"]() * 0x1f),
-          0x1,
-        ),
-        _0x524574 = {
-          url:
-            "https://developer.aliyun.com/group/aliware/article_hot?pageNum=" +
-            _0x177237,
-          type: _0x516d78["XbFSl"],
-        };
-      let _0x3c4654 = await this["fetch"](_0x524574);
-      const _0x4d1f6a = $["Cheerio"]["load"](_0x3c4654),
-        _0x6396d2 = _0x4d1f6a(_0x516d78["ZlwUl"]),
-        _0xa1b2e2 = _0x6396d2["find"](".community-list")
-          ["map"]((_0x4f7801, _0x11a8ba) => {
-            const _0x3b19d6 = null;
-            return {
-              id: _0x516d78["SFRut"](_0x4d1f6a, _0x11a8ba)
-                ["find"](".feed-item")
-                ["attr"](_0x516d78["QZOAr"]),
-              name: _0x516d78["uPDAJ"](_0x4d1f6a, _0x11a8ba)
-                ["find"](_0x516d78["IzCOg"])
-                ["text"](),
-            };
-          })
-          ["get"](),
-        _0x4c4814 =
-          _0xa1b2e2[
-            Math["floor"](
-              _0x516d78["ItYwU"](Math["random"](), _0xa1b2e2["length"]),
-            )
-          ],
-        { id: _0xc6f1e8, name: _0x328275 } = _0x4c4814;
-      return (
-        $["log"]("✅ 随机获取文章id: " + _0xc6f1e8 + ", 标题: " + _0x328275),
-        _0xc6f1e8
-      );
-    } catch (_0x2f4026) {
-      ((this["ckStatus"] = ![]),
-        $["log"]("⛔️ 获取文章列表失败! " + _0x2f4026));
+    const html = await this.fetch({
+      url: "https://developer.aliyun.com/indexFeed/",
+      type: "get",
+    });
+    if (typeof html !== "string") return null;
+    const dom = $.Cheerio.load(html);
+    const ids = [
+      ...new Set(
+        dom("a[href]")
+          .toArray()
+          .map(
+            (link) =>
+              dom(link)
+                .attr("href")
+                ?.match(
+                  /^(?:https:\/\/developer\.aliyun\.com)?\/article\/(\d+)(?:[?#]|$)/,
+                )?.[1],
+          )
+          .filter(Boolean),
+      ),
+    ];
+    if (!ids.length) {
+      $.log("⛔️ 当前文章列表未取得可用文章");
+      return null;
     }
+    return ids[Math.floor(Math.random() * ids.length)];
   }
   async ["getEbooks"]() {
     const _0xbcd128 = null,
@@ -713,6 +592,7 @@ class UserInfo {
         type: "get",
       };
       let _0x4a8d4d = await this["fetch"](_0x4d9fd4);
+      if (typeof _0x4a8d4d !== "string") return null;
       const _0x197405 = $["Cheerio"]["load"](_0x4a8d4d),
         _0x95c7bb = _0x1108c9["iXboJ"](_0x197405, _0x1108c9["YWzNW"]),
         _0x496a64 = _0x95c7bb["find"](_0x1108c9["NUXGX"])
@@ -729,7 +609,7 @@ class UserInfo {
         _0x777a55 =
           _0x496a64[
             Math["floor"](
-              _0x1108c9["pOoay"](Math["random"](), _0x3c853b["answer"]),
+              _0x1108c9["pOoay"](Math["random"](), _0x496a64.length),
             )
           ];
       if (_0x777a55) {
@@ -777,7 +657,13 @@ class UserInfo {
           callback: _0x1e0e13["pvSTb"](getCallback),
         },
       };
-      await this["fetch"](_0x4af17a);
+      const response = runtime.decodeJsonResponse(
+        await this["fetch"](_0x4af17a),
+      );
+      if (!runtime.apiSuccess(response)) {
+        $.log("⛔️ 文章互动接口未返回成功");
+        return false;
+      }
       let _0x33d148 = _0x1e0e13["cLyIc"](
         "文章",
         _0x1e0e13["pIRta"](_0x3541c6, 0x1) ? "取消" : "",
@@ -788,10 +674,10 @@ class UserInfo {
         if (_0x2ed0dc === _0x1e0e13["cdZJP"]) _0x33d148 += "收藏";
         else _0x2ed0dc === _0x1e0e13["gXewl"] && (_0x33d148 += "分享");
       }
-      $["log"]("✅\x20" + _0x33d148 + "成功: " + _0x5af432);
+      $["log"]("✅\x20" + _0x33d148 + "请求成功: " + _0x5af432);
+      return true;
     } catch (_0x56df3a) {
-      ((this["ckStatus"] = ![]),
-        $["log"]("⛔️ " + taskType + "失败!\x20" + _0x56df3a));
+      ((this["ckStatus"] = ![]), $["log"]("⛔️ 文章互动失败!\x20" + _0x56df3a));
     }
   }
   async ["getCsrfToken"](_0x3f985f, _0x20ff73) {
@@ -839,8 +725,12 @@ class UserInfo {
         params: { p_csrf: _0x2dc533 },
         body: { id: _0x29baf3, votes: _0x750f28 },
       };
-      (await this["fetch"](_0x1383be),
-        $["log"]("✅ 回答点赞: " + _0x41d7ed + "-" + _0x29baf3));
+      const response = runtime.decodeJsonResponse(await this.fetch(_0x1383be));
+      const success = runtime.apiSuccess(response);
+      $.log(
+        `${success ? "✅" : "⛔️"} 回答点赞接口：${success ? "请求成功" : "未返回成功"}`,
+      );
+      return success;
     } catch (_0x194e66) {
       ((this["ckStatus"] = ![]), $["log"]("⛔️ 回答点赞失败! " + _0x194e66));
     }
@@ -1322,9 +1212,15 @@ class UserInfo {
           },
         },
         _0x46c6d5 = await this["fetch"](_0x58f751),
-        _0x4202fd = _0x2cfaae["AfHQa"](getJson, _0x46c6d5),
+        _0x4202fd = runtime.decodeJsonResponse(_0x46c6d5),
         _0x1ef603 = _0x4202fd?.["data"]?.["live"]?.["name"],
         _0x3e391f = _0x4202fd?.["data"]?.["live"]?.["duration"];
+      if (
+        !runtime.apiSuccess(_0x4202fd) ||
+        !_0x1ef603 ||
+        !Number.isFinite(Number(_0x3e391f))
+      )
+        return null;
       return (
         console["log"](
           "✅ 获取视频信息成功: " +
@@ -1366,7 +1262,9 @@ class UserInfo {
             Referer: "https://developer.aliyun.com/live/" + _0x1e1e24,
           },
         };
-      await this["fetch"](_0x83fe0e);
+      return runtime.apiSuccess(
+        runtime.decodeJsonResponse(await this.fetch(_0x83fe0e)),
+      );
     } catch (_0xf47ac) {
       ((this["ckStatus"] = ![]), $["log"]("⛔️ 获取视频视图失败! " + _0xf47ac));
     }
@@ -1400,8 +1298,13 @@ class UserInfo {
             Referer: "https://developer.aliyun.com/live/" + _0x4aa617,
           },
         };
-      (await this["fetch"](_0xb88426),
-        console["log"]("✅ 开始播放视频: " + _0x19cac2));
+      const success = runtime.apiSuccess(
+        runtime.decodeJsonResponse(await this.fetch(_0xb88426)),
+      );
+      $.log(
+        `${success ? "✅" : "⛔️"} 视频播放接口：${success ? "请求成功" : "未返回成功"}`,
+      );
+      return success;
     } catch (_0x3d7d6d) {
       ((this["ckStatus"] = ![]), $["log"]("⛔️ 播放视频失败! " + _0x3d7d6d));
     }
@@ -1479,44 +1382,68 @@ class UserInfo {
             Referer: "https://developer.aliyun.com/live/" + _0xf9cc65,
           },
         };
-      (await this["fetch"](_0x54fd5b), console["log"]("✅ 在线心跳确认成功"));
+      const success = runtime.apiSuccess(
+        runtime.decodeJsonResponse(await this.fetch(_0x54fd5b)),
+      );
+      $.log(
+        `${success ? "✅" : "⛔️"} 在线心跳接口：${success ? "请求成功" : "未返回成功"}`,
+      );
+      return success;
     } catch (_0x1be8cf) {
       ((this["ckStatus"] = ![]), $["log"]("⛔️ 在线心跳确认! " + _0x1be8cf));
     }
   }
   async ["playVideo"]() {
-    const _0x1d2110 = null,
-      _0x45bb14 = {
-        XIBBs: function (_0x56b868, _0x4792a4, _0x29943d) {
-          return _0x56b868(_0x4792a4, _0x29943d);
-        },
-        RTQhO: function (_0x189cca, _0x382573) {
-          return _0x189cca < _0x382573;
-        },
-        SYYDF: function (_0x15e1f4, _0x4c59e6) {
-          return _0x15e1f4 == _0x4c59e6;
-        },
-      },
-      _0x42c6be = "253842",
-      _0x6907e1 = _0x45bb14["XIBBs"](getSessionId, this["token"], _0x42c6be),
-      { videoName: _0x152746, videoTime: _0x2d1a1a } =
-        await this["getVideoDetail"](_0x42c6be);
-    (await $["wait"](this["getRandomTime"]()),
-      await this["getVideoView"](_0x42c6be, _0x6907e1),
-      await $["wait"](this["getRandomTime"]()),
-      await this["play"](_0x152746, _0x42c6be, _0x6907e1),
-      await $["wait"](this["getRandomTime"]()));
-    for (
-      let _0x5682e6 = 0x3;
-      _0x45bb14["RTQhO"](_0x5682e6, _0x2d1a1a);
-      _0x5682e6 += 0x3
-    ) {
-      (await this["danmu"](_0x42c6be, _0x5682e6),
-        await $["wait"](0xbb8),
-        _0x45bb14["SYYDF"](_0x5682e6, 0x3c) &&
-          (await this["online"](_0x42c6be, _0x6907e1)));
+    const html = await this.fetch({
+      url: "https://developer.aliyun.com/live/",
+      type: "get",
+    });
+    if (typeof html !== "string") return false;
+    const dom = $.Cheerio.load(html);
+    const ids = [
+      ...new Set(
+        dom("a[href]")
+          .toArray()
+          .map(
+            (link) =>
+              dom(link)
+                .attr("href")
+                ?.match(
+                  /^(?:https:\/\/developer\.aliyun\.com)?\/live\/(\d+)(?:[?#]|$)/,
+                )?.[1],
+          )
+          .filter(Boolean),
+      ),
+    ];
+    // 只从当前列表选择可用视频，最多检查三个；不再使用固定的旧视频 ID。
+    for (const id of ids.slice(0, 3)) {
+      const detail = await this.getVideoDetail(id);
+      const seconds = Number(detail?.videoTime);
+      if (
+        !detail?.videoName ||
+        !Number.isFinite(seconds) ||
+        seconds <= 0 ||
+        seconds > 1800
+      )
+        continue;
+      const session = getSessionId(this.token, id);
+      if (
+        !(await this.getVideoView(id, session)) ||
+        !(await this.play(detail.videoName, id, session))
+      )
+        return false;
+      for (let elapsed = 3; elapsed <= Math.ceil(seconds); elapsed += 3) {
+        await $.wait(3000);
+        await this.danmu(id, elapsed);
+        if (elapsed % 60 === 0 && !(await this.online(id, session)))
+          return false;
+      }
+      if (!(await this.online(id, session))) return false;
+      $.log(`✅ 视频播放请求结束：${detail.videoName}；奖励以积分记录为准`);
+      return true;
     }
-    console["log"]("✅\x20视频播放完毕:\x20" + _0x152746);
+    $.log("⏭️ 当前视频列表未找到 30 分钟以内的有效视频，请手动观看");
+    return false;
   }
   async ["getGroupItems"]() {
     const _0xb45f19 = null,
@@ -1585,10 +1512,13 @@ class UserInfo {
     try {
       const _0x4f6134 = { url: _0xe49e53["qXjkr"], type: "get" };
       let _0x5094a6 = await this["fetch"](_0x4f6134);
-      return (
-        $["log"]("✅ 收取积分: " + _0x5094a6?.["data"]),
-        _0x5094a6?.["data"]
-      );
+      if (!runtime.apiSuccess(_0x5094a6)) {
+        this.ckStatus = false;
+        $.log("⛔️ 积分领取接口未返回成功");
+        return undefined;
+      }
+      $.log("✅ 收取积分: " + _0x5094a6.data);
+      return _0x5094a6.data;
     } catch (_0x218567) {
       $["log"]("⛔️ 收取积分失败! " + _0x218567);
     }
@@ -3622,7 +3552,7 @@ async function loadCheerio() {
   return require("cheerio");
 }
 async function run() {
-  console.log("阿里云社区青龙适配版 v2026.10.04.1");
+  console.log("阿里云社区青龙适配版 v2026.10.04.2");
   try {
     runtime.validateSettings(process.env);
     await checkEnv();

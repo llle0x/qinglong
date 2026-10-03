@@ -292,3 +292,45 @@ test("Ask list uses canonical slash URL and never parses failed responses as HTM
   assert.equal(await failed.account.getAsks(), null);
   assert.ok(failed.logs.every((line) => !line.includes("cheerio.load()")));
 });
+
+test("Current task parsing skips expired and malformed rules without submitting empty actions", async () => {
+  const { account, calls } = sceneHarness(() => ({
+    data: {
+      taskList: [
+        {
+          gmtEnableEnd: 1,
+          finishRule: '{"actions":[{"actionCode":"old","objectId":"expired"}]}',
+        },
+        { finishRule: "{invalid}" },
+        {
+          finishRule:
+            "{&quot;actions&quot;:[{&quot;actionCode&quot;:&quot;sign&quot;,&quot;activityCode&quot;:&quot;current&quot;,&quot;objectId&quot;:&quot;task-1&quot;}]}",
+        },
+      ],
+    },
+  }));
+  const task = await account.getTasks("current-group");
+  assert.equal(task.objectId, "task-1");
+  assert.equal(task.activityCode, "current");
+  assert.equal(calls[0].params.groupId, "current-group");
+  const empty = sceneHarness(() => ({ data: { taskList: [] } }));
+  assert.equal(await empty.account.getTasks("group"), null);
+  assert.equal(await empty.account.signin(null), false);
+  assert.equal(empty.calls.length, 1);
+});
+test("Sign-in logs success only when its API returns success", async () => {
+  for (const code of ["200", "500"]) {
+    const { account, logs } = sceneHarness(() => ({
+      code,
+      message: "test-result",
+    }));
+    assert.equal(
+      await account.signin({ actionCode: "sign", objectId: "task" }),
+      code === "200",
+    );
+    assert.equal(
+      logs.some((line) => line.startsWith("✅")),
+      code === "200",
+    );
+  }
+});
