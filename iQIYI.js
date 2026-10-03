@@ -87,9 +87,25 @@ function redact(text, cookies) {
   for (const secret of [...secrets].sort((a, b) => b.length - a.length)) result = result.split(secret).join('[已隐藏]');
   return result;
 }
-async function sendSummary(title, body, failed, cookies, loader = require) {
+async function sendSummary(title, body, failed, cookies, loader = require, systemApi = globalThis.QLAPI) {
   const mode = process.env.IQIYI_NOTIFY || 'all';
   if (mode === 'off' || (mode === 'errors' && !failed)) return;
+  const content = redact(body, cookies);
+  if (typeof systemApi?.systemNotify === 'function') {
+    try {
+      const result = await systemApi.systemNotify({ title, content });
+      if (result && Number(result.code) === 200) {
+        console.log('青龙系统通知接口返回成功，使用系统设置中的通知渠道；请确认 TG 是否收到。');
+      } else {
+        const code = typeof result?.code === 'number' ? result.code : '未知';
+        console.warn(`青龙系统通知接口未返回成功（code=${code}），请在系统通知设置中测试 TG 渠道。`);
+      }
+    } catch (_) {
+      console.warn('青龙系统通知调用失败，请检查系统通知测试及青龙内置接口。');
+    }
+    return;
+  }
+  console.warn('当前任务未提供 QLAPI.systemNotify，回退到 sendNotify.js；回退方式需要 TG_BOT_TOKEN / TG_USER_ID 等通知环境变量。');
   let notify;
   for (const path of ['./sendNotify.js', '../sendNotify.js', '/ql/data/scripts/sendNotify.js', '/ql/scripts/sendNotify.js']) {
     try {
@@ -103,14 +119,14 @@ async function sendSummary(title, body, failed, cookies, loader = require) {
     return;
   }
   try {
-    await notify(title, redact(body, cookies));
+    await notify(title, content);
     console.log('已调用青龙通知模块；送达结果请查看通知模块日志。');
   } catch (_) {
     console.warn('青龙通知调用失败，请检查通知渠道配置。');
   }
 }
 async function main({ runner = runAccount, notifier = sendSummary } = {}) {
-  console.log('爱奇艺青龙脚本 v2026.10.03.6');
+  console.log('爱奇艺青龙脚本 v2026.10.03.7');
   const cookies = parseAccounts(process.env.IQIYI_COOKIE);
   const summaries = [];
   let failed = false;

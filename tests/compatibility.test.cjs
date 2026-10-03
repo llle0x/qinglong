@@ -263,3 +263,24 @@ test('API diagnostics distinguish service errors without exposing credentials or
   assert.ok(!summary.includes('https://'));
   assert.match(apiStatus({}), /未提供/);
 });
+
+test('system notification uses panel configuration instead of legacy helper', async () => {
+  const { sendSummary } = require('../iQIYI.js');
+  const calls = [];
+  const loader = () => { throw new Error('legacy helper should not run'); };
+  loader.resolve = loader;
+  const systemApi = { systemNotify: async params => { calls.push(params); return { code: 200 }; } };
+  await sendSummary('爱奇艺签到', `Cookie=${cookie}`, true, [cookie], loader, systemApi);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].title, '爱奇艺签到');
+  assert.ok(!calls[0].content.includes('test-token'));
+});
+test('failed system notification does not trigger duplicate legacy sends', async () => {
+  const { sendSummary } = require('../iQIYI.js');
+  let fallbackCalls = 0;
+  const loader = () => { fallbackCalls++; return {}; };
+  loader.resolve = loader;
+  await sendSummary('测试', '测试结果', true, [], loader, { systemNotify: async () => ({ code: 400 }) });
+  await sendSummary('测试', '测试结果', true, [], loader, { systemNotify: async () => { throw new Error('secret diagnostic'); } });
+  assert.equal(fallbackCalls, 0);
+});
